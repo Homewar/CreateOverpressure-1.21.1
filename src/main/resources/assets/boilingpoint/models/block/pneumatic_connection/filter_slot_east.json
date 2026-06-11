@@ -1,0 +1,17 @@
+{
+  "parent": "minecraft:block/block",
+  "render_type": "minecraft:translucent",
+  "textures": {
+    "slot": "boilingpoint:block/pneumatic_extraction/extractor_core_2",
+    "particle": "boilingpoint:block/pneumatic_extraction/extractor_core_2"
+  },
+  "elements": [
+    {
+      "from": [13, 5, 5],
+      "to": [13.25, 11, 11],
+      "faces": {
+        "east": { "uv": [3, 3, 13, 13], "texture": "#slot" }
+      }
+    }
+  ]
+}
