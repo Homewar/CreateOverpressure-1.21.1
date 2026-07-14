@@ -1,6 +1,6 @@
 {
     "parent":  "minecraft:block/block",
-    "render_type":  "minecraft:translucent",
+    "render_type":  "minecraft:cutout",
     "texture_size":  [
                          8,
                          8

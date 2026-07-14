@@ -30,7 +30,6 @@ public class ModBlocks {
     public static final DeferredBlock<PneumaticConnectionBlock> PNEUMATIC_CONNECTION = BLOCKS.register("pneumatic_connection", () -> new PneumaticConnectionBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.3f).sound(SoundType.AMETHYST).noOcclusion()));
     public static final DeferredBlock<ItemPumpBlock> ITEM_PUMP = BLOCKS.register("item_pump", () -> new ItemPumpBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.6f).sound(SoundType.METAL).noOcclusion()));
     public static final DeferredItem<Item> PNEUMATIC_TUBE_ITEM = ITEMS.register("pneumatic_tube", () -> new PneumaticTubeBlockItem(PNEUMATIC_TUBE.get(), new Item.Properties()));
-    public static final DeferredItem<Item> CURVATURE_PNEUMATIC_TUBE_ITEM = ITEMS.register("curvature_pneumatic_tube", () -> new BlockItem(CURVATURE_PNEUMATIC_TUBE.get(), new Item.Properties()));
     public static final DeferredItem<Item> PNEUMATIC_CONNECTION_ITEM = ITEMS.register("pneumatic_connection", () -> new BlockItem(PNEUMATIC_CONNECTION.get(), new Item.Properties()));
     public static final DeferredItem<Item> ITEM_PUMP_ITEM = ITEMS.register("item_pump", () -> new BlockItem(ITEM_PUMP.get(), new Item.Properties()));
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> BOILING_POINT_TAB = CREATIVE_MODE_TABS.register(
@@ -38,10 +37,9 @@ public class ModBlocks {
             () -> CreativeModeTab.builder()
                     .title(Component.translatable("itemGroup.boilingpoint.boiling_point"))
                     .icon(() -> new ItemStack(PNEUMATIC_TUBE_ITEM.get()))
-                    .withTabsAfter(AllCreativeModeTabs.PALETTES_CREATIVE_TAB.getKey())
+                    .withTabsAfter(AllCreativeModeTabs.BASE_CREATIVE_TAB.getKey())
                     .displayItems((parameters, output) -> {
                         output.accept(PNEUMATIC_TUBE_ITEM.get());
-                        output.accept(CURVATURE_PNEUMATIC_TUBE_ITEM.get());
                         output.accept(PNEUMATIC_CONNECTION_ITEM.get());
                         output.accept(ITEM_PUMP_ITEM.get());
                     })

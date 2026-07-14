@@ -2,14 +2,26 @@ package com.hwmods.boilingpoint;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import javax.annotation.Nullable;
 
 import com.mojang.serialization.MapCodec;
+import com.simibubi.create.content.decoration.bracket.BracketBlock;
+import com.simibubi.create.content.decoration.bracket.BracketedBlockEntityBehaviour;
+import com.simibubi.create.content.equipment.wrench.IWrenchableWithBracket;
+import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.ItemInteractionResult;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.BaseEntityBlock;
@@ -26,11 +38,12 @@ import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
-public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterloggedBlock {
+public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterloggedBlock, IWrenchableWithBracket {
     public static final MapCodec<PneumaticTubeBlock> CODEC = simpleCodec(PneumaticTubeBlock::new);
     public static final BooleanProperty NORTH = BlockStateProperties.NORTH;
     public static final BooleanProperty SOUTH = BlockStateProperties.SOUTH;
@@ -110,6 +123,97 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
     }
 
     @Override
+    public Optional<ItemStack> removeBracket(BlockGetter world, BlockPos pos, boolean inOnReplacedContext) {
+        BracketedBlockEntityBehaviour behaviour =
+                BlockEntityBehaviour.get(world, pos, BracketedBlockEntityBehaviour.TYPE);
+
+        if (behaviour == null) {
+            return Optional.empty();
+        }
+
+        BlockState bracket = behaviour.removeBracket(inOnReplacedContext);
+
+        if (bracket == null) {
+            return Optional.empty();
+        }
+
+        return Optional.of(new ItemStack(bracket.getBlock()));
+    }
+
+    @Override
+    protected ItemInteractionResult useItemOn(
+            ItemStack stack,
+            BlockState state,
+            Level level,
+            BlockPos pos,
+            Player player,
+            InteractionHand hand,
+            BlockHitResult hit
+    ) {
+        if (!(stack.getItem() instanceof BlockItem blockItem)
+                || !(blockItem.getBlock() instanceof BracketBlock bracketBlock)) {
+            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+        }
+
+        Direction.Axis tubeAxis = getStraightTubeAxis(state);
+
+        if (tubeAxis == null) {
+            return ItemInteractionResult.FAIL;
+        }
+
+        Direction bracketFace = getBracketFace(tubeAxis, hit.getDirection(), player);
+
+        if (bracketFace == null) {
+            return ItemInteractionResult.FAIL;
+        }
+
+        BracketedBlockEntityBehaviour behaviour =
+                BlockEntityBehaviour.get(level, pos, BracketedBlockEntityBehaviour.TYPE);
+
+        if (behaviour == null || !behaviour.canHaveBracket()) {
+            return ItemInteractionResult.FAIL;
+        }
+
+        boolean alongFirst = bracketFace.getAxis() != Direction.Axis.Z
+                ? tubeAxis == Direction.Axis.Z
+                : tubeAxis == Direction.Axis.Y;
+        BlockState bracketState = bracketBlock.defaultBlockState()
+                .setValue(BracketBlock.TYPE, BracketBlock.BracketType.PIPE)
+                .setValue(BracketBlock.FACING, bracketFace)
+                .setValue(BracketBlock.AXIS_ALONG_FIRST_COORDINATE, !alongFirst);
+
+        if (level.isClientSide) {
+            return ItemInteractionResult.SUCCESS;
+        }
+
+        BlockState previousBracket = behaviour.getBracket();
+
+        if (previousBracket == bracketState) {
+            return ItemInteractionResult.SUCCESS;
+        }
+
+        level.playSound(
+                null,
+                pos,
+                bracketState.getSoundType().getPlaceSound(),
+                SoundSource.BLOCKS,
+                0.75f,
+                1.0f
+        );
+        behaviour.applyBracket(bracketState);
+
+        if (!player.isCreative()) {
+            stack.shrink(1);
+
+            if (previousBracket != null) {
+                player.getInventory().placeItemBackInInventory(new ItemStack(previousBracket.getBlock()));
+            }
+        }
+
+        return ItemInteractionResult.SUCCESS;
+    }
+
+    @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
         return getTubeStateForPlacement(context.getLevel(), context.getClickedPos());
     }
@@ -133,7 +237,7 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
                     .setValue(RIM, connectedDirections.get(level.random.nextInt(connectedDirections.size())));
         }
 
-        return avoidCurvatureRim(level, pos, state);
+        return preferCurvatureRim(level, pos, state);
     }
 
     @Override
@@ -163,7 +267,7 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
             return newState.setValue(RIM, connectedDirections.get(0));
         }
 
-        return avoidCurvatureRim(level, pos, newState);
+        return preferCurvatureRim(level, pos, newState);
     }
 
     @Override
@@ -184,6 +288,15 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
     @Override
     protected FluidState getFluidState(BlockState state) {
         return state.getValue(WATERLOGGED) ? Fluids.WATER.getSource(false) : super.getFluidState(state);
+    }
+
+    @Override
+    protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
+        if (state != newState && !movedByPiston) {
+            removeBracket(level, pos, true).ifPresent(stack -> Block.popResource(level, pos, stack));
+        }
+
+        super.onRemove(state, level, pos, newState, movedByPiston);
     }
 
     private boolean shouldAddRandomRim(BlockPos pos) {
@@ -220,6 +333,46 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
         return false;
     }
 
+    @Nullable
+    private Direction.Axis getStraightTubeAxis(BlockState state) {
+        Direction.Axis axis = null;
+
+        for (Direction direction : Direction.values()) {
+            if (!state.getValue(getConnectionProperty(direction))) {
+                continue;
+            }
+
+            if (axis == null) {
+                axis = direction.getAxis();
+            } else if (axis != direction.getAxis()) {
+                return null;
+            }
+        }
+
+        return axis;
+    }
+
+    @Nullable
+    private Direction getBracketFace(Direction.Axis tubeAxis, Direction clickedFace, @Nullable Player player) {
+        if (clickedFace.getAxis() != tubeAxis) {
+            return clickedFace;
+        }
+
+        if (player == null) {
+            return null;
+        }
+
+        for (Direction direction : Direction.orderedByNearest(player)) {
+            Direction candidate = direction.getOpposite();
+
+            if (candidate.getAxis() != tubeAxis) {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
     private boolean canNeighborAcceptConnection(BlockState neighborState, Direction directionFromNeighbor) {
         if (neighborState.getBlock() instanceof CurvaturePneumaticTubeBlock) {
             return neighborState.getValue(getConnectionProperty(directionFromNeighbor));
@@ -248,24 +401,14 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
         };
     }
 
-    private BlockState avoidCurvatureRim(net.minecraft.world.level.BlockGetter level, BlockPos pos, BlockState state) {
-        if (!state.getValue(HAS_RIM)) {
-            return state;
-        }
-
-        Direction rim = state.getValue(RIM);
-
-        if (!isConnectedCurvature(level, pos, state, rim)) {
-            return state;
-        }
-
+    private BlockState preferCurvatureRim(net.minecraft.world.level.BlockGetter level, BlockPos pos, BlockState state) {
         for (Direction direction : getConnectedDirections(state)) {
-            if (!isConnectedCurvature(level, pos, state, direction)) {
-                return state.setValue(RIM, direction);
+            if (isConnectedCurvature(level, pos, state, direction)) {
+                return state.setValue(HAS_RIM, true).setValue(RIM, direction);
             }
         }
 
-        return state.setValue(HAS_RIM, false).setValue(RIM, Direction.NORTH);
+        return state;
     }
 
     private boolean isConnectedCurvature(

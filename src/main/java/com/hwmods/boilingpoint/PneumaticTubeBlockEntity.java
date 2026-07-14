@@ -1,7 +1,12 @@
 package com.hwmods.boilingpoint;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+
+import com.simibubi.create.content.decoration.bracket.BracketedBlockEntityBehaviour;
+import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
+import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -9,7 +14,6 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -17,7 +21,7 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
 
-public class PneumaticTubeBlockEntity extends BlockEntity {
+public class PneumaticTubeBlockEntity extends SmartBlockEntity {
     public static final int BASE_MOVE_TIME = 24;
     public static final int MIN_PUMPED_MOVE_TIME = 4;
     private static final Map<Long, Long> CLIENT_ANIMATION_STARTS = new HashMap<>();
@@ -31,6 +35,12 @@ public class PneumaticTubeBlockEntity extends BlockEntity {
 
     protected PneumaticTubeBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState blockState) {
         super(type, pos, blockState);
+    }
+
+    @Override
+    public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
+        behaviours.add(new BracketedBlockEntityBehaviour(this, state -> state.getBlock() instanceof PneumaticTubeBlock
+                && !(state.getBlock() instanceof CurvaturePneumaticTubeBlock)));
     }
 
     public static void serverTick(Level level, BlockPos pos, BlockState state, PneumaticTubeBlockEntity tube) {
@@ -312,14 +322,14 @@ public class PneumaticTubeBlockEntity extends BlockEntity {
     }
 
     @Override
-    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
-        super.saveAdditional(tag, registries);
+    protected void write(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
+        super.write(tag, registries, clientPacket);
         saveMovingItem(tag, registries);
     }
 
     @Override
-    protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
-        super.loadAdditional(tag, registries);
+    protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
+        super.read(tag, registries, clientPacket);
         MovingTubeItem previousItem = movingItem;
         movingItem = loadMovingItem(tag, registries);
         updateClientVisualItem(previousItem);
@@ -355,18 +365,6 @@ public class PneumaticTubeBlockEntity extends BlockEntity {
                     id -> getClientGameTime() - movingItem.progress
             );
         }
-    }
-
-    @Override
-    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
-        CompoundTag tag = super.getUpdateTag(registries);
-        saveMovingItem(tag, registries);
-        return tag;
-    }
-
-    @Override
-    public ClientboundBlockEntityDataPacket getUpdatePacket() {
-        return ClientboundBlockEntityDataPacket.create(this);
     }
 
     private void saveMovingItem(CompoundTag tag, HolderLookup.Provider registries) {

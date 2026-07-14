@@ -5,10 +5,9 @@
 	"textures": {
 		"core": "boilingpoint:block/pneumatic_extraction/extractor_core",
 		"core_side": "boilingpoint:block/pneumatic_extraction/extractor_core_2",
-		"core_disabled": "boilingpoint:block/pneumatic_extraction/extractor_core_disable",
+		"particle": "boilingpoint:block/pneumatic_extraction/extractor_core_disable",
 		"pipe": "boilingpoint:block/pneumatic_extraction/extractor_pipe",
-		"pipe_edge": "boilingpoint:block/pneumatic_extraction/extractor_pipe_3",
-		"particle": "boilingpoint:block/pneumatic_extraction/extractor_core_disable"
+		"pipe_edge": "boilingpoint:block/pneumatic_extraction/extractor_pipe_3"
 	},
 	"elements": [
 		{
@@ -28,9 +27,9 @@
 			"to": [12, 12, 16],
 			"rotation": {"angle": 0, "axis": "y", "origin": [4, 4, 0]},
 			"faces": {
-				"north": {"uv": [3, 3, 13, 13], "texture": "#pipe_edge"},
-				"south": {"uv": [3, 3, 13, 13], "texture": "#pipe_edge"},
+				"north": {"uv": [0, 0, 16, 16], "texture": "#pipe_edge"},
 				"east": {"uv": [3.5, 8.5, 7.5, 0.5], "rotation": 90, "texture": "#pipe"},
+				"south": {"uv": [0, 0, 16, 16], "texture": "#pipe_edge"},
 				"west": {"uv": [3.5, 0.5, 7.5, 8.5], "rotation": 90, "texture": "#pipe"},
 				"up": {"uv": [3.5, 8.5, 7.5, 0.5], "texture": "#pipe"},
 				"down": {"uv": [3.5, 0.5, 7.5, 8.5], "texture": "#pipe"}

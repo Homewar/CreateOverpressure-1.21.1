@@ -34,8 +34,11 @@ public class PneumaticConnectionRenderer implements BlockEntityRenderer<Pneumati
             int packedOverlay
     ) {
         ItemStack filter = connector.getFilter();
-        Direction slotFace = PneumaticConnectionBlock.getFilterSlotFace(connector.getBlockState());
+        if (connector.getBlockState().getValue(PneumaticConnectionBlock.MODE) != PneumaticConnectionBlock.ConnectionMode.EXTRACT) {
+            return;
+        }
 
+        Direction slotFace = PneumaticConnectionBlock.getFilterSlotFace(connector.getBlockState());
         renderFilterSlot(slotFace, poseStack, bufferSource);
 
         if (filter.isEmpty()) {
@@ -117,10 +120,26 @@ public class PneumaticConnectionRenderer implements BlockEntityRenderer<Pneumati
             float z1,
             Direction normal
     ) {
+        if (x0 == x1) {
+            addLine(buffer, pose, x0, y0, z0, x0, y1, z0, normal);
+            addLine(buffer, pose, x0, y1, z0, x0, y1, z1, normal);
+            addLine(buffer, pose, x0, y1, z1, x0, y0, z1, normal);
+            addLine(buffer, pose, x0, y0, z1, x0, y0, z0, normal);
+            return;
+        }
+
+        if (y0 == y1) {
+            addLine(buffer, pose, x0, y0, z0, x1, y0, z0, normal);
+            addLine(buffer, pose, x1, y0, z0, x1, y0, z1, normal);
+            addLine(buffer, pose, x1, y0, z1, x0, y0, z1, normal);
+            addLine(buffer, pose, x0, y0, z1, x0, y0, z0, normal);
+            return;
+        }
+
         addLine(buffer, pose, x0, y0, z0, x1, y0, z0, normal);
-        addLine(buffer, pose, x1, y0, z0, x1, y1, z1, normal);
-        addLine(buffer, pose, x1, y1, z1, x0, y1, z1, normal);
-        addLine(buffer, pose, x0, y1, z1, x0, y0, z0, normal);
+        addLine(buffer, pose, x1, y0, z0, x1, y1, z0, normal);
+        addLine(buffer, pose, x1, y1, z0, x0, y1, z0, normal);
+        addLine(buffer, pose, x0, y1, z0, x0, y0, z0, normal);
     }
 
     private void addLine(

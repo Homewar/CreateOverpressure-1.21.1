@@ -49,12 +49,13 @@ public class CurvaturePneumaticTubeBlock extends PneumaticTubeBlock {
                 .setValue(EAST, false)
                 .setValue(WEST, false)
                 .setValue(UP, false)
-                .setValue(DOWN, false);
+                .setValue(DOWN, false)
+                .setValue(WATERLOGGED, false);
     }
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(NORTH, SOUTH, EAST, WEST, UP, DOWN);
+        builder.add(NORTH, SOUTH, EAST, WEST, UP, DOWN, WATERLOGGED);
     }
 
     @Override
@@ -85,7 +86,7 @@ public class CurvaturePneumaticTubeBlock extends PneumaticTubeBlock {
 
     @Override
     protected FluidState getFluidState(BlockState state) {
-        return Fluids.EMPTY.defaultFluidState();
+        return state.getValue(WATERLOGGED) ? Fluids.WATER.getSource(false) : Fluids.EMPTY.defaultFluidState();
     }
 
     @Override
@@ -112,6 +113,10 @@ public class CurvaturePneumaticTubeBlock extends PneumaticTubeBlock {
             BlockPos pos,
             BlockPos neighborPos
     ) {
+        if (state.getValue(WATERLOGGED)) {
+            level.scheduleTick(pos, Fluids.WATER, Fluids.WATER.getTickDelay(level));
+        }
+
         return state;
     }
 

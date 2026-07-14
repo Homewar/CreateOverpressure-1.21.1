@@ -1,8 +1,8 @@
 package com.hwmods.boilingpoint;
 
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ItemBlockRenderTypes;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.resources.model.ModelResourceLocation;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModContainer;
@@ -10,6 +10,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
+import net.neoforged.neoforge.client.event.ModelEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 
@@ -28,15 +29,9 @@ public class BoilingPointClient {
 
     @SubscribeEvent
     static void onClientSetup(FMLClientSetupEvent event) {
-        // Some client setup code
-        BoilingPoint.LOGGER.info("HELLO FROM CLIENT SETUP");
-        BoilingPoint.LOGGER.info("MINECRAFT NAME >> {}", Minecraft.getInstance().getUser().getName());
-
         event.enqueueWork(() -> {
-            ItemBlockRenderTypes.setRenderLayer(ModBlocks.PNEUMATIC_TUBE.get(), RenderType.translucent());
-            ItemBlockRenderTypes.setRenderLayer(ModBlocks.CURVATURE_PNEUMATIC_TUBE.get(), RenderType.translucent());
-            ItemBlockRenderTypes.setRenderLayer(ModBlocks.PNEUMATIC_CONNECTION.get(), RenderType.translucent());
-            ItemBlockRenderTypes.setRenderLayer(ModBlocks.ITEM_PUMP.get(), RenderType.translucent());
+            ItemBlockRenderTypes.setRenderLayer(ModBlocks.PNEUMATIC_CONNECTION.get(), RenderType.cutout());
+            ItemBlockRenderTypes.setRenderLayer(ModBlocks.ITEM_PUMP.get(), RenderType.cutout());
         });
     }
 
@@ -58,5 +53,17 @@ public class BoilingPointClient {
                 ModBlockEntities.ITEM_PUMP.get(),
                 ItemPumpRenderer::new
         );
+    }
+
+    @SubscribeEvent
+    static void modifyBakedModels(ModelEvent.ModifyBakingResult event) {
+        event.getModels().replaceAll((location, model) -> isPneumaticTubeModel(location)
+                ? new PneumaticTubeBracketedModel(model)
+                : model);
+    }
+
+    private static boolean isPneumaticTubeModel(ModelResourceLocation location) {
+        return location.id().getNamespace().equals(BoilingPoint.MODID)
+                && location.id().getPath().equals("pneumatic_tube");
     }
 }

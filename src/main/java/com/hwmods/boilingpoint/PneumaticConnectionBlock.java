@@ -173,6 +173,10 @@ public class PneumaticConnectionBlock extends BaseEntityBlock implements IWrench
         {
             BlockEntity blockEntity = level.getBlockEntity(pos);
 
+            if (state.getValue(MODE) != ConnectionMode.EXTRACT) {
+                return InteractionResult.PASS;
+            }
+
             if (!(blockEntity instanceof PneumaticConnectionBlockEntity connector) || connector.getFilter().isEmpty()) {
                 return InteractionResult.PASS;
             }
@@ -202,6 +206,10 @@ public class PneumaticConnectionBlock extends BaseEntityBlock implements IWrench
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
 
+        if (state.getValue(MODE) != ConnectionMode.EXTRACT) {
+            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+        }
+
         if (!connector.getFilter().isEmpty()) {
             if (level.isClientSide) {
                 connector.clearFilterClientSide();
@@ -210,10 +218,6 @@ public class PneumaticConnectionBlock extends BaseEntityBlock implements IWrench
             }
 
             return ItemInteractionResult.SUCCESS;
-        }
-
-        if (state.getValue(MODE) != ConnectionMode.EXTRACT) {
-            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
 
         if (!(stack.getItem() instanceof FilterItem)) {

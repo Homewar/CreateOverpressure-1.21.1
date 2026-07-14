@@ -85,7 +85,6 @@ public class PneumaticTubeBlockItem extends BlockItem {
 
         if (start == null) {
             CURVE_STARTS.put(playerId, new CurveStart(clickedPos, clickedFace));
-            player.displayClientMessage(Component.literal("Curve start selected"), true);
             return InteractionResult.CONSUME;
         }
 
@@ -94,7 +93,6 @@ public class PneumaticTubeBlockItem extends BlockItem {
 
         if (!built) {
             CURVE_STARTS.put(playerId, new CurveStart(clickedPos, clickedFace));
-            player.displayClientMessage(Component.literal("Curve start moved"), true);
         }
 
         return InteractionResult.CONSUME;
@@ -174,10 +172,14 @@ public class PneumaticTubeBlockItem extends BlockItem {
         UUID curvatureSectionId = UUID.randomUUID();
 
         for (PlacedTube tube : tubes) {
-            BlockState state = tube.state.setValue(
-                    PneumaticTubeBlock.WATERLOGGED,
-                    level.getFluidState(tube.pos).is(Fluids.WATER)
-            );
+            BlockState state = tube.state;
+
+            if (state.hasProperty(PneumaticTubeBlock.WATERLOGGED)) {
+                state = state.setValue(
+                        PneumaticTubeBlock.WATERLOGGED,
+                        level.getFluidState(tube.pos).is(Fluids.WATER)
+                );
+            }
 
             level.setBlock(tube.pos, state, Block.UPDATE_ALL);
 
@@ -189,20 +191,6 @@ public class PneumaticTubeBlockItem extends BlockItem {
 
         if (!player.getAbilities().instabuild) {
             stack.shrink(tubes.size());
-        }
-
-        if (curvatureTubePositions.isEmpty()) {
-            player.displayClientMessage(Component.literal("Tube section built: " + tubes.size() + ", curvature: none"), true);
-            BoilingPoint.LOGGER.info("Built straight pneumatic tube section: {} blocks from {} to {}", tubes.size(), startPos, endPos);
-        } else {
-            player.displayClientMessage(Component.literal(
-                    "Tube section built: " + tubes.size() + ", curvature at " + curvatureTubePositions
-            ), false);
-            BoilingPoint.LOGGER.info(
-                    "Built Bezier pneumatic tube section: {} blocks, curvature tubes at {}",
-                    tubes.size(),
-                    curvatureTubePositions
-            );
         }
 
         return true;
@@ -350,10 +338,17 @@ public class PneumaticTubeBlockItem extends BlockItem {
 
     private BlockState createTubeState(boolean curvature, Direction first, Direction second) {
         BlockState state = (curvature ? ModBlocks.CURVATURE_PNEUMATIC_TUBE.get() : ModBlocks.PNEUMATIC_TUBE.get())
-                .defaultBlockState()
-                .setValue(PneumaticTubeBlock.WATERLOGGED, false)
-                .setValue(PneumaticTubeBlock.HAS_RIM, false)
-                .setValue(PneumaticTubeBlock.RIM, Direction.NORTH);
+                .defaultBlockState();
+
+        if (state.hasProperty(PneumaticTubeBlock.WATERLOGGED)) {
+            state = state.setValue(PneumaticTubeBlock.WATERLOGGED, false);
+        }
+        if (state.hasProperty(PneumaticTubeBlock.HAS_RIM)) {
+            state = state.setValue(PneumaticTubeBlock.HAS_RIM, false);
+        }
+        if (state.hasProperty(PneumaticTubeBlock.RIM)) {
+            state = state.setValue(PneumaticTubeBlock.RIM, Direction.NORTH);
+        }
 
         for (Direction direction : Direction.values()) {
             state = state.setValue(PneumaticTubeBlock.getConnectionProperty(direction), false);
@@ -583,15 +578,6 @@ public class PneumaticTubeBlockItem extends BlockItem {
         if (blockEntity instanceof CurvaturePneumaticTubeEntity curvatureTube) {
             curvatureTube.setSectionId(sectionId);
             curvatureTube.setCurve(tube.bezier.p0, tube.bezier.p1, tube.bezier.p2, tube.bezier.p3);
-            BoilingPoint.LOGGER.info(
-                    "Placed Bezier curvature tube at {} in section {} with p0={}, p1={}, p2={}, p3={}",
-                    tube.pos,
-                    sectionId,
-                    tube.bezier.p0,
-                    tube.bezier.p1,
-                    tube.bezier.p2,
-                    tube.bezier.p3
-            );
         }
     }
 

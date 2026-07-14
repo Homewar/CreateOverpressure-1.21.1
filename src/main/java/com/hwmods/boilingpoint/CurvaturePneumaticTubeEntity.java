@@ -6,7 +6,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
@@ -91,8 +90,8 @@ public class CurvaturePneumaticTubeEntity extends PneumaticTubeBlockEntity {
     }
 
     @Override
-    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
-        super.saveAdditional(tag, registries);
+    protected void write(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
+        super.write(tag, registries, clientPacket);
         savePoint(tag, "p0", p0);
         savePoint(tag, "p1", p1);
         savePoint(tag, "p2", p2);
@@ -101,8 +100,8 @@ public class CurvaturePneumaticTubeEntity extends PneumaticTubeBlockEntity {
     }
 
     @Override
-    protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
-        super.loadAdditional(tag, registries);
+    protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
+        super.read(tag, registries, clientPacket);
         p0 = loadPoint(tag, "p0", p0);
         p1 = loadPoint(tag, "p1", p1);
         p2 = loadPoint(tag, "p2", p2);
@@ -111,22 +110,6 @@ public class CurvaturePneumaticTubeEntity extends PneumaticTubeBlockEntity {
         if (tag.hasUUID("section_id")) {
             sectionId = tag.getUUID("section_id");
         }
-    }
-
-    @Override
-    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
-        CompoundTag tag = super.getUpdateTag(registries);
-        savePoint(tag, "p0", p0);
-        savePoint(tag, "p1", p1);
-        savePoint(tag, "p2", p2);
-        savePoint(tag, "p3", p3);
-        tag.putUUID("section_id", sectionId);
-        return tag;
-    }
-
-    @Override
-    public ClientboundBlockEntityDataPacket getUpdatePacket() {
-        return ClientboundBlockEntityDataPacket.create(this);
     }
 
     private void savePoint(CompoundTag tag, String name, Vec3 point) {
