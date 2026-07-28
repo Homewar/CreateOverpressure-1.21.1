@@ -1,0 +1,6 @@
+{
+  "parent": "overpressure:block/pneumatic_connection/pneumatic_connection_extract_x",
+  "textures": {
+    "pipe": "overpressure:block/pneumatic_extraction/extractor_pipe_redstone_enable"
+  }
+}

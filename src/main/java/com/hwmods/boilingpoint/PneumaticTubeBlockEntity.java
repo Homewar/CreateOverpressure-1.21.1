@@ -1,19 +1,28 @@
 package com.hwmods.boilingpoint;
 
+import java.util.ArrayDeque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
 
+import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
 import com.simibubi.create.content.decoration.bracket.BracketedBlockEntityBehaviour;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
+import com.simibubi.create.foundation.utility.CreateLang;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -21,9 +30,10 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
 
-public class PneumaticTubeBlockEntity extends SmartBlockEntity {
+public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveGoggleInformation {
     public static final int BASE_MOVE_TIME = 24;
     public static final int MIN_PUMPED_MOVE_TIME = 4;
+    private static final int SPEED_BAR_SEGMENTS = 18;
     private static final Map<Long, Long> CLIENT_ANIMATION_STARTS = new HashMap<>();
 
     private MovingTubeItem movingItem;
@@ -41,6 +51,50 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity {
     public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
         behaviours.add(new BracketedBlockEntityBehaviour(this, state -> state.getBlock() instanceof PneumaticTubeBlock
                 && !(state.getBlock() instanceof CurvaturePneumaticTubeBlock)));
+    }
+
+    @Override
+    public boolean addToGoggleTooltip(List<Component> tooltip, boolean isPlayerSneaking) {
+        int moveTime = getDisplayedMoveTime();
+        addTransportSpeedTooltip(tooltip, moveTime);
+        return true;
+    }
+
+    public int getDisplayedMoveTime() {
+        MovingTubeItem item = getRenderMovingItem();
+
+        if (item != null) {
+            return item.moveTime;
+        }
+
+        return calculateConnectedLineMoveTime();
+    }
+
+    public static void addTransportSpeedTooltip(List<Component> tooltip, int moveTime) {
+        int clampedMoveTime = Math.max(MIN_PUMPED_MOVE_TIME, Math.min(BASE_MOVE_TIME, moveTime));
+        double blocksPerSecond = 20.0 / clampedMoveTime;
+
+        CreateLang.builder()
+                .add(Component.translatable("overpressure.goggles.transport_speed")
+                        .withStyle(ChatFormatting.GRAY))
+                .forGoggles(tooltip);
+        CreateLang.builder()
+                .add(speedBar(clampedMoveTime))
+                .space()
+                .add(CreateLang.number(blocksPerSecond)
+                        .style(ChatFormatting.AQUA))
+                .add(Component.translatable("overpressure.goggles.blocks_per_second")
+                        .withStyle(ChatFormatting.DARK_GRAY))
+                .forGoggles(tooltip, 1);
+    }
+
+    private static MutableComponent speedBar(int moveTime) {
+        double speed = 20.0 / moveTime;
+        double maxSpeed = 20.0 / MIN_PUMPED_MOVE_TIME;
+        int filled = Math.max(1, Math.min(SPEED_BAR_SEGMENTS, (int) Math.round(speed / maxSpeed * SPEED_BAR_SEGMENTS)));
+        return Component.empty()
+                .append(Component.literal("|".repeat(filled)).withStyle(ChatFormatting.DARK_GREEN))
+                .append(Component.literal("|".repeat(SPEED_BAR_SEGMENTS - filled)).withStyle(ChatFormatting.DARK_GRAY));
     }
 
     public static void serverTick(Level level, BlockPos pos, BlockState state, PneumaticTubeBlockEntity tube) {
@@ -440,6 +494,75 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity {
         }
 
         return moveTime;
+    }
+
+    private int calculateConnectedLineMoveTime() {
+        if (level == null) {
+            return BASE_MOVE_TIME;
+        }
+
+        int moveTime = BASE_MOVE_TIME;
+        Set<BlockPos> visited = new HashSet<>();
+        Queue<BlockPos> queue = new ArrayDeque<>();
+
+        visited.add(worldPosition);
+        queue.add(worldPosition);
+
+        while (!queue.isEmpty() && visited.size() < 128) {
+            BlockPos current = queue.remove();
+            BlockEntity currentBlockEntity = level.getBlockEntity(current);
+
+            if (currentBlockEntity instanceof ItemPumpBlockEntity pump) {
+                moveTime = Math.min(moveTime, pump.getMoveTime());
+            }
+
+            for (Direction direction : Direction.values()) {
+                BlockPos next = current.relative(direction);
+
+                if (visited.contains(next)) {
+                    continue;
+                }
+
+                if (!canMoveBetween(current, next, direction)) {
+                    continue;
+                }
+
+                visited.add(next);
+                queue.add(next);
+            }
+        }
+
+        return moveTime;
+    }
+
+    private boolean canMoveBetween(BlockPos from, BlockPos to, Direction direction) {
+        BlockEntity fromBlockEntity = level.getBlockEntity(from);
+        BlockEntity toBlockEntity = level.getBlockEntity(to);
+
+        if (!(toBlockEntity instanceof PneumaticTubeBlockEntity)
+                && !(toBlockEntity instanceof ItemPumpBlockEntity)) {
+            return false;
+        }
+
+        if (fromBlockEntity instanceof ItemPumpBlockEntity fromPump
+                && !fromPump.canTravelTo(level, direction)) {
+            return false;
+        }
+
+        if (fromBlockEntity instanceof PneumaticTubeBlockEntity fromTube
+                && !fromTube.canTravelTo(level, direction)) {
+            return false;
+        }
+
+        if (toBlockEntity instanceof ItemPumpBlockEntity toPump) {
+            return toPump.canTravelTo(level, direction.getOpposite());
+        }
+
+        if (toBlockEntity instanceof PneumaticTubeBlockEntity toTube) {
+            return toTube.canTravelTo(level, direction.getOpposite());
+        }
+
+        return false;
     }
 
     private CompoundTag saveBlockPos(BlockPos pos) {

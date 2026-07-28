@@ -1,0 +1,31 @@
+{
+  "multipart": [
+    { "when": { "facing": "down", "powered": "false" }, "apply": { "model": "overpressure:block/pneumatic_connection/pneumatic_connection_extract_y" } },
+    { "when": { "facing": "east", "powered": "false" }, "apply": { "model": "overpressure:block/pneumatic_connection/pneumatic_connection_extract_x" } },
+    { "when": { "facing": "north", "powered": "false" }, "apply": { "model": "overpressure:block/pneumatic_connection/pneumatic_connection_extract" } },
+    { "when": { "facing": "south", "powered": "false" }, "apply": { "model": "overpressure:block/pneumatic_connection/pneumatic_connection_extract" } },
+    { "when": { "facing": "up", "powered": "false" }, "apply": { "model": "overpressure:block/pneumatic_connection/pneumatic_connection_extract_y" } },
+    { "when": { "facing": "west", "powered": "false" }, "apply": { "model": "overpressure:block/pneumatic_connection/pneumatic_connection_extract_x" } },
+
+    { "when": { "facing": "down", "powered": "true" }, "apply": { "model": "overpressure:block/pneumatic_connection/pneumatic_connection_extract_y_redstone" } },
+    { "when": { "facing": "east", "powered": "true" }, "apply": { "model": "overpressure:block/pneumatic_connection/pneumatic_connection_extract_x_redstone" } },
+    { "when": { "facing": "north", "powered": "true" }, "apply": { "model": "overpressure:block/pneumatic_connection/pneumatic_connection_extract_redstone" } },
+    { "when": { "facing": "south", "powered": "true" }, "apply": { "model": "overpressure:block/pneumatic_connection/pneumatic_connection_extract_redstone" } },
+    { "when": { "facing": "up", "powered": "true" }, "apply": { "model": "overpressure:block/pneumatic_connection/pneumatic_connection_extract_y_redstone" } },
+    { "when": { "facing": "west", "powered": "true" }, "apply": { "model": "overpressure:block/pneumatic_connection/pneumatic_connection_extract_x_redstone" } },
+
+    { "when": { "facing": "east" }, "apply": { "model": "overpressure:block/pneumatic_connection/arrow_east" } },
+    { "when": { "facing": "north" }, "apply": { "model": "overpressure:block/pneumatic_connection/arrow_north" } },
+    { "when": { "facing": "south" }, "apply": { "model": "overpressure:block/pneumatic_connection/arrow_south" } },
+    { "when": { "facing": "west" }, "apply": { "model": "overpressure:block/pneumatic_connection/arrow_west" } },
+
+    { "when": { "facing": "up", "arrow_facing": "east" }, "apply": { "model": "overpressure:block/pneumatic_connection/arrow_down_x" } },
+    { "when": { "facing": "up", "arrow_facing": "west" }, "apply": { "model": "overpressure:block/pneumatic_connection/arrow_down_x" } },
+    { "when": { "facing": "up", "arrow_facing": "north" }, "apply": { "model": "overpressure:block/pneumatic_connection/arrow_down_z" } },
+    { "when": { "facing": "up", "arrow_facing": "south" }, "apply": { "model": "overpressure:block/pneumatic_connection/arrow_down_z" } },
+    { "when": { "facing": "down", "arrow_facing": "east" }, "apply": { "model": "overpressure:block/pneumatic_connection/arrow_up_x" } },
+    { "when": { "facing": "down", "arrow_facing": "west" }, "apply": { "model": "overpressure:block/pneumatic_connection/arrow_up_x" } },
+    { "when": { "facing": "down", "arrow_facing": "north" }, "apply": { "model": "overpressure:block/pneumatic_connection/arrow_up_z" } },
+    { "when": { "facing": "down", "arrow_facing": "south" }, "apply": { "model": "overpressure:block/pneumatic_connection/arrow_up_z" } }
+  ]
+}

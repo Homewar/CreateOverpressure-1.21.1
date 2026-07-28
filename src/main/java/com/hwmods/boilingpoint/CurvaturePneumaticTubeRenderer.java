@@ -5,7 +5,9 @@ import org.joml.Matrix4f;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 
+import net.createmod.ponder.api.level.PonderLevel;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.world.phys.AABB;
@@ -57,7 +59,10 @@ public class CurvaturePneumaticTubeRenderer implements BlockEntityRenderer<Curva
             int packedLight,
             int packedOverlay
     ) {
-        VertexConsumer buffer = bufferSource.getBuffer(BoilingPointRenderTypes.curveTube());
+        RenderType renderType = tube.getLevel() instanceof PonderLevel
+                ? BoilingPointRenderTypes.curveTubeInPonder()
+                : BoilingPointRenderTypes.curveTube();
+        VertexConsumer buffer = bufferSource.getBuffer(renderType);
         Matrix4f pose = poseStack.last().pose();
         Vec3[][] sections = buildSections(tube);
 

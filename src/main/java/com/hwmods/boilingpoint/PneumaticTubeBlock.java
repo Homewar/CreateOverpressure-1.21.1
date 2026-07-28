@@ -401,7 +401,7 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
         };
     }
 
-    private BlockState preferCurvatureRim(net.minecraft.world.level.BlockGetter level, BlockPos pos, BlockState state) {
+    protected BlockState preferCurvatureRim(net.minecraft.world.level.BlockGetter level, BlockPos pos, BlockState state) {
         for (Direction direction : getConnectedDirections(state)) {
             if (isConnectedCurvature(level, pos, state, direction)) {
                 return state.setValue(HAS_RIM, true).setValue(RIM, direction);

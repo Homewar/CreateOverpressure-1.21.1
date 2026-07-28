@@ -28,6 +28,7 @@ import net.minecraft.world.level.block.entity.BlockEntityTicker;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
@@ -69,13 +70,15 @@ public class PneumaticConnectionBlock extends BaseEntityBlock implements IWrench
 
     public static final EnumProperty<ConnectionMode> MODE =
         EnumProperty.create("mode", ConnectionMode.class);
+    public static final BooleanProperty POWERED = BlockStateProperties.POWERED;
 
     public PneumaticConnectionBlock(Properties properties) {
         super(properties);
         this.registerDefaultState(this.stateDefinition.any()
                 .setValue(FACING, net.minecraft.core.Direction.NORTH)
                 .setValue(ARROW_FACING, net.minecraft.core.Direction.NORTH)
-                .setValue(MODE, ConnectionMode.DISABLED));
+                .setValue(MODE, ConnectionMode.DISABLED)
+                .setValue(POWERED, false));
     }
 
     @Override
@@ -144,7 +147,8 @@ public class PneumaticConnectionBlock extends BaseEntityBlock implements IWrench
         Direction arrowFacing = context.getHorizontalDirection().getOpposite();
         BlockState state = this.defaultBlockState()
                 .setValue(FACING, facing)
-                .setValue(ARROW_FACING, arrowFacing);
+                .setValue(ARROW_FACING, arrowFacing)
+                .setValue(POWERED, context.getLevel().hasNeighborSignal(context.getClickedPos()));
         return state.setValue(MODE, getModeFromNeighbors(context.getLevel(), context.getClickedPos(), state));
     }
 
@@ -153,6 +157,7 @@ public class PneumaticConnectionBlock extends BaseEntityBlock implements IWrench
         builder.add(FACING);
         builder.add(ARROW_FACING);
         builder.add(MODE);
+        builder.add(POWERED);
     }
 
     @Override
@@ -164,7 +169,26 @@ public class PneumaticConnectionBlock extends BaseEntityBlock implements IWrench
             BlockPos pos,
             BlockPos neighborPos
     ) {
-        return state.setValue(MODE, getModeFromNeighbors(level, pos, state));
+        return state
+                .setValue(MODE, getModeFromNeighbors(level, pos, state))
+                .setValue(POWERED, level instanceof Level realLevel && realLevel.hasNeighborSignal(pos));
+    }
+
+    @Override
+    public void neighborChanged(
+            BlockState state,
+            Level level,
+            BlockPos pos,
+            Block neighborBlock,
+            BlockPos neighborPos,
+            boolean movedByPiston
+    ) {
+        boolean powered = level.hasNeighborSignal(pos);
+        if (state.getValue(POWERED) != powered) {
+            level.setBlock(pos, state.setValue(POWERED, powered), Block.UPDATE_CLIENTS);
+        }
+
+        super.neighborChanged(state, level, pos, neighborBlock, neighborPos, movedByPiston);
     }
 
     @Override
@@ -288,6 +312,25 @@ public class PneumaticConnectionBlock extends BaseEntityBlock implements IWrench
         }
 
         return Direction.UP;
+    }
+
+    @Nullable
+    public Direction getTubeDirection(Level level, BlockPos pos, BlockState state) {
+        Direction facing = state.getValue(FACING);
+
+        return switch (state.getValue(MODE)) {
+            case EXTRACT -> facing;
+            case INSERT -> facing.getOpposite();
+            case DISABLED -> {
+                if (hasInventory(level, pos, facing.getOpposite())) {
+                    yield facing;
+                }
+                if (hasInventory(level, pos, facing)) {
+                    yield facing.getOpposite();
+                }
+                yield null;
+            }
+        };
     }
 
     @Override

@@ -35,9 +35,9 @@ public class ModBlocks {
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> BOILING_POINT_TAB = CREATIVE_MODE_TABS.register(
             "boiling_point",
             () -> CreativeModeTab.builder()
-                    .title(Component.translatable("itemGroup.boilingpoint.boiling_point"))
-                    .icon(() -> new ItemStack(PNEUMATIC_TUBE_ITEM.get()))
-                    .withTabsAfter(AllCreativeModeTabs.BASE_CREATIVE_TAB.getKey())
+                    .title(Component.translatable("itemGroup.overpressure.overpressure"))
+                    .icon(() -> new ItemStack(ITEM_PUMP_ITEM.get()))
+                    .withTabsBefore(AllCreativeModeTabs.PALETTES_CREATIVE_TAB.getKey())
                     .displayItems((parameters, output) -> {
                         output.accept(PNEUMATIC_TUBE_ITEM.get());
                         output.accept(PNEUMATIC_CONNECTION_ITEM.get());

@@ -1,0 +1,17 @@
+{
+  "parent": "minecraft:block/block",
+  "render_type": "minecraft:translucent",
+  "textures": {
+    "slot": "overpressure:block/pneumatic_extraction/extractor_core_2",
+    "particle": "overpressure:block/pneumatic_extraction/extractor_core_2"
+  },
+  "elements": [
+    {
+      "from": [5, 13, 5],
+      "to": [11, 13.25, 11],
+      "faces": {
+        "up": { "uv": [3, 3, 13, 13], "texture": "#slot" }
+      }
+    }
+  ]
+}

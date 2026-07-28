@@ -1,0 +1,23 @@
+{
+	"parent": "block/block",
+	"textures": {
+		"core_side": "overpressure:block/pneumatic_extraction/extractor_core_2",
+		"particle": "overpressure:block/pneumatic_extraction/extractor_core_2"
+	},
+	"elements": [
+		{
+			"from": [13, 3, 3],
+			"to": [13.01, 13, 13],
+			"faces": {
+				"east": {"uv": [0, 0, 16, 16], "rotation": 90, "texture": "#core_side"}
+			}
+		},
+		{
+			"from": [2.99, 3, 3],
+			"to": [3, 13, 13],
+			"faces": {
+				"west": {"uv": [0, 0, 16, 16], "rotation": 90, "texture": "#core_side"}
+			}
+		}
+	]
+}

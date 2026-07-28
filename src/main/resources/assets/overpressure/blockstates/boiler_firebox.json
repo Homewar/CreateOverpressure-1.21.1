@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "overpressure:block/boiler_firebox"
+    }
+  }
+}

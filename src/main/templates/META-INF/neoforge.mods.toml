@@ -46,7 +46,7 @@ authors="Homewarriors"
 
 # The description text for the mod (multi line!) (#mandatory)
 description='''
-Example mod description.
+Pneumatic item transport for Create: curved tubes, filtered extractors, redstone control and kinetic item pumps.
 '''
 
 # The [[mixins]] block allows you to declare your mixin config to FML so that it gets loaded.
@@ -94,7 +94,7 @@ config="${mod_id}.mixins.json"
 #[features.${mod_id}]
 #openGLVersion="[3.2,)"
 
-[[dependencies.boilingpoint]]
+[[dependencies.${mod_id}]]
     modId="create"
     type="required"
     versionRange="[6.0.10,6.1.0)"

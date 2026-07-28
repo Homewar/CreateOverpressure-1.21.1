@@ -1,0 +1,111 @@
+{
+    "parent":  "minecraft:block/block",
+    "render_type":  "minecraft:cutout",
+    "texture_size":  [
+                         8,
+                         8
+                     ],
+    "textures":  {
+                     "4":  "overpressure:block/item_pipe_texture/rim",
+                     "particle":  "overpressure:block/item_pipe_texture/rim"
+                 },
+    "elements":  [
+                     {
+                         "from":  [
+                                      3,
+                                      3,
+                                      14
+                                  ],
+                         "to":  [
+                                    13,
+                                    13,
+                                    16
+                                ],
+                         "rotation":  {
+                                          "angle":  0,
+                                          "axis":  "y",
+                                          "origin":  [
+                                                         8,
+                                                         28,
+                                                         8
+                                                     ]
+                                      },
+                         "faces":  {
+                                       "north":  {
+                                                     "uv":  [
+                                                                0,
+                                                                5,
+                                                                5,
+                                                                10
+                                                            ],
+                                                     "texture":  "#4"
+                                                 },
+                                       "east":  {
+                                                    "uv":  [
+                                                               10,
+                                                               3,
+                                                               5,
+                                                               4
+                                                           ],
+                                                    "rotation":  270,
+                                                    "texture":  "#4"
+                                                },
+                                       "south":  {
+                                                     "uv":  [
+                                                                0,
+                                                                5,
+                                                                5,
+                                                                10
+                                                            ],
+                                                     "texture":  "#4",
+                                                     "cullface":  "south"
+                                                 },
+                                       "west":  {
+                                                    "uv":  [
+                                                               5,
+                                                               3,
+                                                               10,
+                                                               2
+                                                           ],
+                                                    "rotation":  270,
+                                                    "texture":  "#4"
+                                                },
+                                       "up":  {
+                                                  "uv":  [
+                                                             10,
+                                                             1,
+                                                             5,
+                                                             2
+                                                         ],
+                                                  "rotation":  180,
+                                                  "texture":  "#4"
+                                              },
+                                       "down":  {
+                                                    "uv":  [
+                                                               5,
+                                                               1,
+                                                               10,
+                                                               0
+                                                           ],
+                                                    "rotation":  180,
+                                                    "texture":  "#4"
+                                                }
+                                   },
+                         "name":  "rim_south"
+                     }
+                 ],
+    "display":  {
+                    "fixed":  {
+                                  "rotation":  [
+                                                   0,
+                                                   90,
+                                                   0
+                                               ],
+                                  "scale":  [
+                                                0.5,
+                                                0.5,
+                                                0.5
+                                            ]
+                              }
+                }
+}

@@ -50,12 +50,14 @@ public class CurvaturePneumaticTubeBlock extends PneumaticTubeBlock {
                 .setValue(WEST, false)
                 .setValue(UP, false)
                 .setValue(DOWN, false)
-                .setValue(WATERLOGGED, false);
+                .setValue(WATERLOGGED, false)
+                .setValue(HAS_RIM, false)
+                .setValue(RIM, Direction.NORTH);
     }
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(NORTH, SOUTH, EAST, WEST, UP, DOWN, WATERLOGGED);
+        builder.add(NORTH, SOUTH, EAST, WEST, UP, DOWN, WATERLOGGED, HAS_RIM, RIM);
     }
 
     @Override
@@ -117,7 +119,7 @@ public class CurvaturePneumaticTubeBlock extends PneumaticTubeBlock {
             level.scheduleTick(pos, Fluids.WATER, Fluids.WATER.getTickDelay(level));
         }
 
-        return state;
+        return preferCurvatureRim(level, pos, state);
     }
 
     @Override

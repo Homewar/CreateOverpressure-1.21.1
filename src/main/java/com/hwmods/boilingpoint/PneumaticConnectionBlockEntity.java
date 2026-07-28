@@ -30,7 +30,8 @@ public class PneumaticConnectionBlockEntity extends BlockEntity {
             return;
         }
 
-        if (state.getValue(PneumaticConnectionBlock.MODE) == PneumaticConnectionBlock.ConnectionMode.EXTRACT) {
+        if (state.getValue(PneumaticConnectionBlock.MODE) == PneumaticConnectionBlock.ConnectionMode.EXTRACT
+                && !state.getValue(PneumaticConnectionBlock.POWERED)) {
             connector.tryStartTransfer(level);
         }
     }
