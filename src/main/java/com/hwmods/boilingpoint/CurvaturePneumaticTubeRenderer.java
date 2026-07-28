@@ -10,6 +10,7 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
+import net.minecraft.client.renderer.entity.ItemRenderer;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -19,7 +20,10 @@ public class CurvaturePneumaticTubeRenderer implements BlockEntityRenderer<Curva
     private static final Vec3 WORLD_UP = new Vec3(0.0, 1.0, 0.0);
     private static final Vec3 WORLD_EAST = new Vec3(1.0, 0.0, 0.0);
 
+    private final ItemRenderer itemRenderer;
+
     public CurvaturePneumaticTubeRenderer(BlockEntityRendererProvider.Context context) {
+        itemRenderer = context.getItemRenderer();
     }
 
     @Override
@@ -78,7 +82,8 @@ public class CurvaturePneumaticTubeRenderer implements BlockEntityRenderer<Curva
             addQuad(buffer, pose, from[3], from[0], to[0], to[3], u0, 0.0f, u1, 1.0f, packedLight, packedOverlay);
         }
 
-        PneumaticTubeRenderer.renderMovingCapsule(tube, partialTick, poseStack, bufferSource, packedLight, packedOverlay);
+        PneumaticTubeRenderer.renderMovingItem(
+                tube, partialTick, poseStack, bufferSource, packedLight, packedOverlay, itemRenderer);
     }
 
     private Vec3[][] buildSections(CurvaturePneumaticTubeEntity tube) {

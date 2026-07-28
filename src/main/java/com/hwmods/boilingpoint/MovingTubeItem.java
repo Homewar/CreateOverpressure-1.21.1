@@ -13,6 +13,7 @@ public class MovingTubeItem {
     public int progress;
     public int moveTime;
     public long animationId;
+    public long startedAtGameTime;
     public long lastTickedGameTime;
 
     public MovingTubeItem(ItemStack stack, List<BlockPos> path, BlockPos targetConnector) {
@@ -23,6 +24,7 @@ public class MovingTubeItem {
         this.progress = 0;
         this.moveTime = PneumaticTubeBlockEntity.BASE_MOVE_TIME;
         this.animationId = 0L;
+        this.startedAtGameTime = 0L;
         this.lastTickedGameTime = -1L;
     }
 }

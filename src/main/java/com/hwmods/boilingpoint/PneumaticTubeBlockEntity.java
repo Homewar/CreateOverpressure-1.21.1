@@ -118,6 +118,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         movingItem.pathIndex = pathIndex;
         movingItem.moveTime = calculateMoveTime(path);
         movingItem.animationId = createAnimationId(level);
+        movingItem.startedAtGameTime = level.getGameTime();
         movingItem.lastTickedGameTime = level.getGameTime();
         setChanged();
         syncMovingItem(level);
@@ -355,6 +356,10 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
     }
 
     private float getClientMovingTicks(MovingTubeItem item, float partialTick) {
+        if (item.startedAtGameTime > 0L) {
+            return Math.max(0.0f, getClientGameTime() - item.startedAtGameTime + partialTick);
+        }
+
         long startedAt = CLIENT_ANIMATION_STARTS.computeIfAbsent(
                 item.animationId,
                 id -> getClientGameTime() - item.progress
@@ -434,6 +439,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         movingTag.putInt("progress", movingItem.progress);
         movingTag.putInt("move_time", movingItem.moveTime);
         movingTag.putLong("animation_id", movingItem.animationId);
+        movingTag.putLong("started_at", movingItem.startedAtGameTime);
 
         ListTag pathTag = new ListTag();
 
@@ -475,6 +481,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
                 ? Math.max(1, movingTag.getInt("move_time"))
                 : BASE_MOVE_TIME;
         item.animationId = movingTag.getLong("animation_id");
+        item.startedAtGameTime = movingTag.getLong("started_at");
         return item;
     }
 
