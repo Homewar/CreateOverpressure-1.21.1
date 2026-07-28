@@ -1,5 +1,7 @@
 package com.hwmods.boilingpoint;
 
+import com.simibubi.create.AllItems;
+
 import net.createmod.ponder.api.PonderPalette;
 import net.createmod.ponder.api.element.ElementLink;
 import net.createmod.ponder.api.element.WorldSectionElement;
@@ -12,7 +14,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.phys.Vec3;
@@ -21,7 +22,7 @@ import net.minecraft.world.phys.Vec3;
  * Registers Overpressure scenes for the Create Ponder system.
  *
  * The scenes are backed by structure files in
- * src/main/resources/assets/overpressure/ponder/*.nbt.
+ * src/main/resources/assets/boilingpoint/ponder/*.nbt.
  */
 public class BoilingPointPonderPlugin implements PonderPlugin {
 
@@ -66,8 +67,6 @@ public class BoilingPointPonderPlugin implements PonderPlugin {
                     util.select().fromTo(6, 1, 0, 6, 1, 6), 70);
             scene.overlay().showOutline(PonderPalette.GREEN, new Object(),
                     util.select().fromTo(0, 1, 6, 6, 1, 6), 70);
-            scene.idle(80);
-
             scene.overlay().showText(70)
                     .text("The curve section is treated as one continuous tube path.")
                     .independent();
@@ -109,7 +108,7 @@ public class BoilingPointPonderPlugin implements PonderPlugin {
 
             BlockPos extractorPos = new BlockPos(5, 1, 3);
             scene.world().modifyBlockEntity(extractorPos, PneumaticConnectionBlockEntity.class,
-                    connector -> connector.setFilter(new ItemStack(Items.IRON_INGOT)));
+                    connector -> connector.setFilter(AllItems.FILTER.asStack()));
             scene.overlay().showOutline(PonderPalette.GREEN, new Object(),
                     util.select().position(extractorPos), 60);
             scene.overlay().showText(70)
@@ -118,6 +117,7 @@ public class BoilingPointPonderPlugin implements PonderPlugin {
             scene.idle(80);
 
             scene.effects().indicateRedstone(extractorPos);
+            scene.world().toggleRedstonePower(util.select().position(extractorPos));
             scene.world().modifyBlock(extractorPos,
                     state -> state.setValue(PneumaticConnectionBlock.POWERED, true), true);
             scene.overlay().showOutline(PonderPalette.RED, new Object(),

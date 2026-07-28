@@ -10,7 +10,7 @@ import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 
 @Mod(BoilingPoint.MODID)
 public class BoilingPoint {
-    public static final String MODID = "overpressure";
+    public static final String MODID = "boilingpoint";
     private static final double ITEM_PUMP_STRESS_IMPACT = 1.0;
 
     public BoilingPoint(IEventBus modBus, ModContainer modContainer) {

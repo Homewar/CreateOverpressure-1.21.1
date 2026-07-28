@@ -267,11 +267,11 @@ public class PlanningModeRenderer {
         gui.fill(x - 4, y - 4, x + width, y + height, 0xC0101010);
         gui.fill(x - 4, y - 4, x + width, y - 3, 0xFFD6D653);
 
-        gui.drawString(minecraft.font, Component.translatable("overpressure.planning.title"), x, y, 0xFFD6D653, false);
+        gui.drawString(minecraft.font, Component.translatable("boilingpoint.planning.title"), x, y, 0xFFD6D653, false);
         int line = y + 14;
         String[] keys = { "1", "2", "3", "4", "5" };
         for (String key : keys) {
-            gui.drawString(minecraft.font, Component.translatable("overpressure.planning." + key), x, line, 0xE0E0E0, false);
+            gui.drawString(minecraft.font, Component.translatable("boilingpoint.planning." + key), x, line, 0xE0E0E0, false);
             line += 13;
         }
     }

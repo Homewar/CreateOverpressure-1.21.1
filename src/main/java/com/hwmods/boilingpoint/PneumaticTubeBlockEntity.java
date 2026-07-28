@@ -75,7 +75,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         double blocksPerSecond = 20.0 / clampedMoveTime;
 
         CreateLang.builder()
-                .add(Component.translatable("overpressure.goggles.transport_speed")
+                .add(Component.translatable("boilingpoint.goggles.transport_speed")
                         .withStyle(ChatFormatting.GRAY))
                 .forGoggles(tooltip);
         CreateLang.builder()
@@ -83,7 +83,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
                 .space()
                 .add(CreateLang.number(blocksPerSecond)
                         .style(ChatFormatting.AQUA))
-                .add(Component.translatable("overpressure.goggles.blocks_per_second")
+                .add(Component.translatable("boilingpoint.goggles.blocks_per_second")
                         .withStyle(ChatFormatting.DARK_GRAY))
                 .forGoggles(tooltip, 1);
     }

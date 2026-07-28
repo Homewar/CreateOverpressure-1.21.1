@@ -16,7 +16,7 @@ import org.lwjgl.glfw.GLFW;
 @EventBusSubscriber(modid = BoilingPoint.MODID, value = Dist.CLIENT)
 public class PlanningMode {
     public static final KeyMapping TOGGLE = new KeyMapping(
-            "key.overpressure.planning_mode",
+            "key.boilingpoint.planning_mode",
             GLFW.GLFW_KEY_G,
             "key.categories.boilingpoint"
     );

@@ -1,0 +1,6 @@
+{
+  "parent": "boilingpoint:block/pneumatic_connection/pneumatic_connection_extract",
+  "textures": {
+    "pipe": "boilingpoint:block/pneumatic_extraction/extractor_pipe_redstone_enable"
+  }
+}

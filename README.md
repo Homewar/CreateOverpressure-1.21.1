@@ -1,7 +1,7 @@
 
-# Overpressure
+# Create: Overpressure
 
-Overpressure adds pneumatic item transport to Create.
+Create: Overpressure adds pneumatic item transport to Create.
 
 ## Features
 
@@ -19,4 +19,4 @@ Overpressure adds pneumatic item transport to Create.
 
 ## Installation
 
-Install Create and Overpressure into the `mods` folder of the same NeoForge profile.
+Install Create and Create: Overpressure into the `mods` folder of the same NeoForge profile.

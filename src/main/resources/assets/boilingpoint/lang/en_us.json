@@ -1,0 +1,40 @@
+{
+  "itemGroup.boilingpoint.boiling_point": "Create: Overpressure",
+  "block.boilingpoint.pneumatic_tube": "Pneumatic Tube",
+  "block.boilingpoint.curvature_pneumatic_tube": "Curvature Pneumatic Tube",
+  "block.boilingpoint.pneumatic_connection": "Pneumatic Connector",
+  "block.boilingpoint.item_pump": "Item Pump",
+  "key.categories.boilingpoint": "Create: Overpressure",
+  "key.boilingpoint.planning_mode": "Planning / Thinking Mode",
+  "boilingpoint.goggles.transport_speed": "Item transport speed",
+  "boilingpoint.goggles.blocks_per_second": " blocks/s",
+
+  "boilingpoint.planning.title": "Pneumatic Tube Planning",
+  "boilingpoint.planning.1": "Tubes build in one go between two endpoints.",
+  "boilingpoint.planning.2": "Corner tubes connect at an angle into one smooth tube.",
+  "boilingpoint.planning.3": "Place a Pneumatic Connector and rotate it: arrow from",
+  "boilingpoint.planning.4": "a chest extracts, arrow into a chest inserts.",
+  "boilingpoint.planning.5": "Add an Item Pump to speed up item transport.",
+
+  "boilingpoint.ponder.curvature_tube.header": "Curved Pneumatic Tubes",
+  "boilingpoint.ponder.curvature_tube.text_1": "Curved pneumatic tubes are purely visual and may have no collision in some places.",
+  "boilingpoint.ponder.curvature_tube.text_2": "The real tube blocks are invisible and arranged at an angle.",
+  "boilingpoint.ponder.curvature_tube.text_3": "The curved section is treated as one continuous tube path.",
+
+  "boilingpoint.ponder.pneumatic_connection.header": "Pneumatic Extractors",
+  "boilingpoint.ponder.pneumatic_connection.text_1": "Pneumatic connectors decide whether items leave or enter a container.",
+  "boilingpoint.ponder.pneumatic_connection.text_2": "Extractor mode pulls from the container into the tube line.",
+  "boilingpoint.ponder.pneumatic_connection.text_3": "Insert mode sends items from the tube line into the container.",
+  "boilingpoint.ponder.pneumatic_connection.text_4": "Rotate the connector with a wrench to change the side and direction.",
+  "boilingpoint.ponder.pneumatic_connection.text_5": "Place a filter into an extractor to choose which items it may pull from the container.",
+  "boilingpoint.ponder.pneumatic_connection.text_6": "A redstone signal disables the extractor. A lit outline means the extractor is blocked.",
+  "boilingpoint.ponder.pneumatic_connection.text_7": "Items that have already started moving will continue to their destination.",
+
+  "boilingpoint.ponder.item_pump.header": "Upgrade with an Item Pump",
+  "boilingpoint.ponder.item_pump.text_1": "A regular pneumatic line may seem too slow.",
+  "boilingpoint.ponder.item_pump.text_2": "Replace the central tube with an Item Pump to accelerate item movement.",
+  "boilingpoint.ponder.item_pump.text_3": "The pump does not work by itself.",
+  "boilingpoint.ponder.item_pump.text_4": "The pump needs rotation from a cogwheel to start working.",
+  "boilingpoint.ponder.item_pump.text_5": "Slow rotation gives the pump a modest transfer speed.",
+  "boilingpoint.ponder.item_pump.text_6": "The faster the cogwheel turns, the faster items move through the line."
+}
