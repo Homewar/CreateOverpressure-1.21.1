@@ -292,6 +292,11 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
 
     @Override
     protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
+        if (!level.isClientSide && !state.is(newState.getBlock())
+                && level.getBlockEntity(pos) instanceof PneumaticTubeBlockEntity tube) {
+            tube.ejectMovingItem(level, net.minecraft.world.phys.Vec3.atCenterOf(pos));
+        }
+
         if (state != newState && !movedByPiston) {
             removeBracket(level, pos, true).ifPresent(stack -> Block.popResource(level, pos, stack));
         }

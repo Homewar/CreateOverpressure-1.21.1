@@ -1,6 +1,5 @@
 package com.hwmods.boilingpoint;
 
-import com.simibubi.create.content.logistics.filter.FilterItem;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 
 import javax.annotation.Nullable;
@@ -10,12 +9,6 @@ import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.util.StringRepresentable;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
-import net.minecraft.world.ItemInteractionResult;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.Level;
@@ -35,7 +28,6 @@ import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
-import net.minecraft.world.phys.BlockHitResult;
 import net.neoforged.neoforge.capabilities.Capabilities;
 
 public class PneumaticConnectionBlock extends BaseEntityBlock implements IWrenchable {
@@ -191,119 +183,6 @@ public class PneumaticConnectionBlock extends BaseEntityBlock implements IWrench
         super.neighborChanged(state, level, pos, neighborBlock, neighborPos, movedByPiston);
     }
 
-    @Override
-    protected InteractionResult useWithoutItem(
-        BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit)
-        {
-            BlockEntity blockEntity = level.getBlockEntity(pos);
-
-            if (state.getValue(MODE) != ConnectionMode.EXTRACT) {
-                return InteractionResult.PASS;
-            }
-
-            if (!(blockEntity instanceof PneumaticConnectionBlockEntity connector) || connector.getFilter().isEmpty()) {
-                return InteractionResult.PASS;
-            }
-
-            if (level.isClientSide) {
-                connector.clearFilterClientSide();
-            } else {
-                returnFilterToPlayer(player, InteractionHand.MAIN_HAND, connector.removeFilter());
-            }
-
-            return InteractionResult.SUCCESS;
-        }
-
-    @Override
-    protected ItemInteractionResult useItemOn(
-            ItemStack stack,
-            BlockState state,
-            Level level,
-            BlockPos pos,
-            Player player,
-            InteractionHand hand,
-            BlockHitResult hit
-    ) {
-        BlockEntity blockEntity = level.getBlockEntity(pos);
-
-        if (!(blockEntity instanceof PneumaticConnectionBlockEntity connector)) {
-            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
-        }
-
-        if (state.getValue(MODE) != ConnectionMode.EXTRACT) {
-            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
-        }
-
-        if (!connector.getFilter().isEmpty()) {
-            if (level.isClientSide) {
-                connector.clearFilterClientSide();
-            } else {
-                returnFilterToPlayer(player, hand, connector.removeFilter());
-            }
-
-            return ItemInteractionResult.SUCCESS;
-        }
-
-        if (!(stack.getItem() instanceof FilterItem)) {
-            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
-        }
-
-        if (!level.isClientSide) {
-            ItemStack oldFilter = connector.removeFilter();
-
-            if (!oldFilter.isEmpty()) {
-                returnFilterToPlayer(player, hand, oldFilter);
-            }
-
-            ItemStack filter = stack.copy();
-            filter.setCount(1);
-            connector.setFilter(filter);
-
-            if (!player.isCreative()) {
-                stack.shrink(1);
-            }
-        }
-
-        return ItemInteractionResult.SUCCESS;
-    }
-
-    private static void returnFilterToPlayer(Player player, InteractionHand hand, ItemStack filter) {
-        if (filter.isEmpty()) {
-            return;
-        }
-
-        ItemStack held = player.getItemInHand(hand);
-
-        if (held.isEmpty()) {
-            player.setItemInHand(hand, filter);
-            return;
-        }
-
-        if (!player.getInventory().add(filter)) {
-            player.drop(filter, false);
-        }
-    }
-
-    private static boolean isFilterSlotHit(BlockState state, BlockHitResult hit) {
-        Direction slotFace = getFilterSlotFace(state);
-
-        if (hit.getDirection() != slotFace) {
-            return false;
-        }
-
-        double x = hit.getLocation().x - hit.getBlockPos().getX();
-        double y = hit.getLocation().y - hit.getBlockPos().getY();
-        double z = hit.getLocation().z - hit.getBlockPos().getZ();
-        double min = 4.5 / 16.0;
-        double max = 11.5 / 16.0;
-
-        return switch (slotFace) {
-            case UP, DOWN -> x >= min && x <= max && z >= min && z <= max;
-            case NORTH, SOUTH -> x >= min && x <= max && y >= min && y <= max;
-            case EAST, WEST -> z >= min && z <= max && y >= min && y <= max;
-        };
-    }
-
     public static Direction getFilterSlotFace(BlockState state) {
         Direction facing = state.getValue(FACING);
 
@@ -354,21 +233,11 @@ public class PneumaticConnectionBlock extends BaseEntityBlock implements IWrench
 
     @Override
     protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
-        if (!state.is(newState.getBlock())) {
+        if (!level.isClientSide && !state.is(newState.getBlock())) {
             BlockEntity blockEntity = level.getBlockEntity(pos);
 
-            if (!level.isClientSide && blockEntity instanceof PneumaticConnectionBlockEntity connector) {
-                ItemStack filter = connector.removeFilter();
-
-                if (!filter.isEmpty()) {
-                    level.addFreshEntity(new ItemEntity(
-                            level,
-                            pos.getX() + 0.5,
-                            pos.getY() + 0.5,
-                            pos.getZ() + 0.5,
-                            filter
-                    ));
-                }
+            if (blockEntity instanceof PneumaticConnectionBlockEntity connector) {
+                connector.destroy();
             }
         }
 

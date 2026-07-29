@@ -12,6 +12,7 @@ import net.minecraft.client.renderer.entity.ItemRenderer;
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.BlockItem;
 
 public class PneumaticConnectionRenderer implements BlockEntityRenderer<PneumaticConnectionBlockEntity> {
     private static final float FILTER_SCALE = 0.42f;
@@ -39,9 +40,7 @@ public class PneumaticConnectionRenderer implements BlockEntityRenderer<Pneumati
         }
 
         Direction slotFace = PneumaticConnectionBlock.getFilterSlotFace(connector.getBlockState());
-        renderFilterSlot(slotFace, poseStack, bufferSource);
-
-        if (filter.isEmpty()) {
+        if (filter.isEmpty() || !(filter.getItem() instanceof BlockItem)) {
             return;
         }
 

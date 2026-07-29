@@ -7,6 +7,7 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.Vec3;
@@ -65,15 +66,20 @@ public class PneumaticTubeRenderer implements BlockEntityRenderer<PneumaticTubeB
     }
 
     private static Vec3 getMovingItemCenter(PneumaticTubeBlockEntity tube, MovingTubeItem item, float partialTick) {
+        if (item.waitingAtDestination) {
+            return getOpenEnd(tube.getBlockPos(), item.targetConnector);
+        }
+
+        if (item.waitingForNextTube && item.pathIndex + 1 < item.path.size()) {
+            return getOpenEnd(tube.getBlockPos(), item.path.get(item.pathIndex + 1));
+        }
+
         RenderStep step = getRenderStep(tube, item, partialTick);
         return getPathPoint(tube, item, step.pathIndex(), step.progress());
     }
 
     private static RenderStep getRenderStep(PneumaticTubeBlockEntity tube, MovingTubeItem item, float partialTick) {
-        float segments = tube.getMovingProgressSegments(partialTick);
-        int pathIndex = Math.min(Math.max(0, (int) Math.floor(segments)), item.path.size() - 1);
-        float progress = Math.min(1.0f, Math.max(0.0f, segments - pathIndex));
-        return new RenderStep(pathIndex, progress);
+        return new RenderStep(item.pathIndex, tube.getMovingProgress(partialTick));
     }
 
     private static Vec3 getPathPoint(PneumaticTubeBlockEntity tube, MovingTubeItem item, int pathIndex, float progress) {
@@ -116,6 +122,14 @@ public class PneumaticTubeRenderer implements BlockEntityRenderer<PneumaticTubeB
 
         BlockPos next = item.path.get(pathIndex + 1);
         return Vec3.atLowerCornerOf(next.subtract(currentPos)).add(0.5, 0.5, 0.5);
+    }
+
+    private static Vec3 getOpenEnd(BlockPos from, BlockPos toward) {
+        Direction direction = Direction.getNearest(
+                toward.getX() - from.getX(), toward.getY() - from.getY(), toward.getZ() - from.getZ());
+        return new Vec3(0.5 + direction.getStepX() * 0.42,
+                0.5 + direction.getStepY() * 0.42,
+                0.5 + direction.getStepZ() * 0.42);
     }
 
     private record RenderStep(int pathIndex, float progress) {

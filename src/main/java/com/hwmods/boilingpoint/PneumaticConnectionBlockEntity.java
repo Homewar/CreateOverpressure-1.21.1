@@ -1,6 +1,8 @@
 package com.hwmods.boilingpoint;
 
-import com.simibubi.create.content.logistics.filter.FilterItemStack;
+import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
+import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
+import com.simibubi.create.foundation.blockEntity.behaviour.filtering.FilteringBehaviour;
 
 import javax.annotation.Nullable;
 
@@ -8,21 +10,27 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.items.IItemHandler;
 
-public class PneumaticConnectionBlockEntity extends BlockEntity {
+public class PneumaticConnectionBlockEntity extends SmartBlockEntity {
     private static final int TRANSFER_COOLDOWN = 5;
-    private ItemStack filter = ItemStack.EMPTY;
+    private FilteringBehaviour filtering;
 
     public PneumaticConnectionBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlockEntities.PNEUMATIC_CONNECTION.get(), pos, state);
+    }
+
+    @Override
+    public void addBehaviours(java.util.List<BlockEntityBehaviour> behaviours) {
+        filtering = new FilteringBehaviour(this, new PneumaticConnectionFilterSlot())
+                .onlyActiveWhen(() -> getBlockState().getValue(PneumaticConnectionBlock.MODE)
+                        == PneumaticConnectionBlock.ConnectionMode.EXTRACT);
+        behaviours.add(filtering);
     }
 
     public static void serverTick(Level level, BlockPos pos, BlockState state, PneumaticConnectionBlockEntity connector) {
@@ -62,7 +70,7 @@ public class PneumaticConnectionBlockEntity extends BlockEntity {
             return;
         }
 
-        ItemStack extracted = extractOneItem(level, source.handler());
+        ItemStack extracted = extractItems(level, source.handler());
 
         if (extracted.isEmpty()) {
             return;
@@ -135,54 +143,30 @@ public class PneumaticConnectionBlockEntity extends BlockEntity {
     }
 
     public ItemStack getFilter() {
-        return filter;
+        return filtering.getFilter();
     }
 
     public void setFilter(ItemStack filter) {
-        this.filter = filter.copy();
-        this.filter.setCount(Math.min(this.filter.getCount(), 1));
-        setChanged();
-
-        if (level != null) {
-            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_CLIENTS);
-        }
+        filtering.setFilter(filter);
     }
 
     public ItemStack removeFilter() {
-        ItemStack removed = filter;
-        filter = ItemStack.EMPTY;
-        setChanged();
-
-        if (level != null) {
-            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_CLIENTS);
-        }
+        ItemStack removed = filtering.getFilter().copy();
+        filtering.setFilter(ItemStack.EMPTY);
 
         return removed;
     }
 
-    public void clearFilterClientSide() {
-        filter = ItemStack.EMPTY;
-        setChanged();
-
-        if (level != null) {
-            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_CLIENTS);
-        }
-    }
-
-    private ItemStack extractOneItem(Level level, IItemHandler handler) {
+    private ItemStack extractItems(Level level, IItemHandler handler) {
         for (int slot = 0; slot < handler.getSlots(); slot++) {
             ItemStack simulated = handler.extractItem(slot, 1, true);
 
-            if (!simulated.isEmpty() && filterAllows(level, simulated)) {
+            if (!simulated.isEmpty() && filtering.test(simulated)) {
                 return handler.extractItem(slot, 1, false);
             }
         }
 
         return ItemStack.EMPTY;
-    }
-
-    private boolean filterAllows(Level level, ItemStack stack) {
-        return filter.isEmpty() || FilterItemStack.of(filter.copy()).test(level, stack);
     }
 
     private ItemStack insertItem(IItemHandler handler, ItemStack stack) {
@@ -200,33 +184,11 @@ public class PneumaticConnectionBlockEntity extends BlockEntity {
     }
 
     @Override
-    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
-        super.saveAdditional(tag, registries);
+    protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
+        super.read(tag, registries, clientPacket);
 
-        if (!filter.isEmpty()) {
-            tag.put("filter", filter.save(registries));
+        if (filtering.getFilter().isEmpty() && tag.contains("filter")) {
+            filtering.setFilter(ItemStack.parseOptional(registries, tag.getCompound("filter")));
         }
-    }
-
-    @Override
-    protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
-        super.loadAdditional(tag, registries);
-        filter = tag.contains("filter") ? ItemStack.parseOptional(registries, tag.getCompound("filter")) : ItemStack.EMPTY;
-    }
-
-    @Override
-    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
-        CompoundTag tag = super.getUpdateTag(registries);
-
-        if (!filter.isEmpty()) {
-            tag.put("filter", filter.save(registries));
-        }
-
-        return tag;
-    }
-
-    @Override
-    public ClientboundBlockEntityDataPacket getUpdatePacket() {
-        return ClientboundBlockEntityDataPacket.create(this);
     }
 }
