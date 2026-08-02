@@ -1,0 +1,8 @@
+{
+  "sources": [
+    {
+      "type": "single",
+      "resource": "overpressure:entity/capsule/pneumatic_capsule"
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": { "0": "overpressure:block/encased_pipe/encased_pipe_andesite", "particle": "overpressure:block/encased_pipe/encased_pipe_andesite" },
+  "elements": [{ "from": [0, 0, 15], "to": [16, 16, 16], "faces": { "south": { "uv": [0, 0, 16, 16], "texture": "#0" } } }]
+}

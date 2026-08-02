@@ -1,0 +1,28 @@
+{
+  "multipart": [
+    { "when": { "OR": [{ "down": "false", "has_connection": "true", "has_rim": "false" }, { "down": "false", "has_connection": "true", "has_rim": "true", "rim": "north|south|east|west|up" }] }, "apply": { "model": "overpressure:block/encased_pipe/brass_flat", "x": -90 } },
+    { "when": { "OR": [{ "up": "false", "has_connection": "true", "has_rim": "false" }, { "up": "false", "has_connection": "true", "has_rim": "true", "rim": "north|south|east|west|down" }] }, "apply": { "model": "overpressure:block/encased_pipe/brass_flat", "x": 90 } },
+    { "when": { "OR": [{ "north": "false", "has_connection": "true", "has_rim": "false" }, { "north": "false", "has_connection": "true", "has_rim": "true", "rim": "south|east|west|up|down" }] }, "apply": { "model": "overpressure:block/encased_pipe/brass_flat", "y": 180 } },
+    { "when": { "OR": [{ "south": "false", "has_connection": "true", "has_rim": "false" }, { "south": "false", "has_connection": "true", "has_rim": "true", "rim": "north|east|west|up|down" }] }, "apply": { "model": "overpressure:block/encased_pipe/brass_flat" } },
+    { "when": { "OR": [{ "west": "false", "has_connection": "true", "has_rim": "false" }, { "west": "false", "has_connection": "true", "has_rim": "true", "rim": "north|south|east|up|down" }] }, "apply": { "model": "overpressure:block/encased_pipe/brass_flat", "y": 90 } },
+    { "when": { "OR": [{ "east": "false", "has_connection": "true", "has_rim": "false" }, { "east": "false", "has_connection": "true", "has_rim": "true", "rim": "north|south|west|up|down" }] }, "apply": { "model": "overpressure:block/encased_pipe/brass_flat", "y": 270 } },
+    { "when": { "down": "true" }, "apply": { "model": "overpressure:block/encased_pipe/brass_open", "x": -90 } },
+    { "when": { "up": "true" }, "apply": { "model": "overpressure:block/encased_pipe/brass_open", "x": 90 } },
+    { "when": { "north": "true" }, "apply": { "model": "overpressure:block/encased_pipe/brass_open", "y": 180 } },
+    { "when": { "south": "true" }, "apply": { "model": "overpressure:block/encased_pipe/brass_open" } },
+    { "when": { "west": "true" }, "apply": { "model": "overpressure:block/encased_pipe/brass_open", "y": 90 } },
+    { "when": { "east": "true" }, "apply": { "model": "overpressure:block/encased_pipe/brass_open", "y": 270 } }
+    ,{ "when": { "has_connection": "true", "has_rim": "true", "rim": "down" }, "apply": { "model": "overpressure:block/encased_pipe/brass_open", "x": -90 } }
+    ,{ "when": { "has_connection": "true", "has_rim": "true", "rim": "up" }, "apply": { "model": "overpressure:block/encased_pipe/brass_open", "x": 90 } }
+    ,{ "when": { "has_connection": "true", "has_rim": "true", "rim": "north" }, "apply": { "model": "overpressure:block/encased_pipe/brass_open", "y": 180 } }
+    ,{ "when": { "has_connection": "true", "has_rim": "true", "rim": "south" }, "apply": { "model": "overpressure:block/encased_pipe/brass_open" } }
+    ,{ "when": { "has_connection": "true", "has_rim": "true", "rim": "west" }, "apply": { "model": "overpressure:block/encased_pipe/brass_open", "y": 90 } }
+    ,{ "when": { "has_connection": "true", "has_rim": "true", "rim": "east" }, "apply": { "model": "overpressure:block/encased_pipe/brass_open", "y": 270 } }
+    ,{ "when": { "has_connection": "false" }, "apply": { "model": "overpressure:block/encased_pipe/brass_open", "y": 180 } }
+    ,{ "when": { "has_connection": "false" }, "apply": { "model": "overpressure:block/encased_pipe/brass_open" } }
+    ,{ "when": { "has_connection": "false" }, "apply": { "model": "overpressure:block/encased_pipe/brass_flat", "x": -90 } }
+    ,{ "when": { "has_connection": "false" }, "apply": { "model": "overpressure:block/encased_pipe/brass_flat", "x": 90 } }
+    ,{ "when": { "has_connection": "false" }, "apply": { "model": "overpressure:block/encased_pipe/brass_flat", "y": 90 } }
+    ,{ "when": { "has_connection": "false" }, "apply": { "model": "overpressure:block/encased_pipe/brass_flat", "y": 270 } }
+  ]
+}

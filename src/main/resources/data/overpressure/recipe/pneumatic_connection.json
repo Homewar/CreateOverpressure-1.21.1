@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " I ",
+    "CTC",
+    " F "
+  ],
+  "key": {
+    "C": {
+      "item": "create:brass_sheet"
+    },
+    "F": {
+      "item": "create:andesite_funnel"
+    },
+    "I": {
+      "item": "minecraft:iron_nugget"
+    },
+    "T": {
+      "item": "overpressure:pneumatic_tube"
+    }
+  },
+  "result": {
+    "id": "overpressure:pneumatic_connection",
+    "count": 2
+  }
+}

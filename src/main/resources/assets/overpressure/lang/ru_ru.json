@@ -1,0 +1,44 @@
+{
+  "itemGroup.overpressure.overpressure": "Create: Overpressure",
+  "block.overpressure.pneumatic_tube": "Пневматическая труба",
+  "block.overpressure.curvature_pneumatic_tube": "Пневматическая труба (изогнутая)",
+  "block.overpressure.pneumatic_connection": "Пневмо-коннектор",
+  "block.overpressure.item_pump": "Насос предметов",
+
+  "block.overpressure.creative_item_pump": "\u041a\u0440\u0435\u0430\u0442\u0438\u0432\u043d\u044b\u0439 \u043d\u0430\u0441\u043e\u0441 \u043f\u0440\u0435\u0434\u043c\u0435\u0442\u043e\u0432",
+
+  "key.categories.overpressure": "Create: Overpressure",
+  "key.overpressure.planning_mode": "Режим планирования",
+  "overpressure.goggles.transport_speed": "Скорость переноса предметов",
+  "overpressure.goggles.blocks_per_second": " блоков/с",
+
+  "overpressure.planning.title": "Планирование труб",
+  "overpressure.planning.1": "Трубы строятся сразу кусками между двумя точками.",
+  "overpressure.planning.2": "Угловые трубы, соединённые под углом, дают гладкую трубу.",
+  "overpressure.planning.3": "Поставьте пневмо-коннектор и поверните его: стрелка ОТ",
+  "overpressure.planning.4": "сундука - выкачивает, В сундук - закачивает.",
+  "overpressure.planning.5": "Насос предметов ускоряет перенос предметов.",
+
+  "overpressure.ponder.curvature_tube.header": "Изогнутые пневмотрубы",
+  "overpressure.ponder.curvature_tube.text_1": "Изогнутые пневматические трубы являются лишь визуальной частью и в некоторых местах не имеют коллизии.",
+  "overpressure.ponder.curvature_tube.text_2": "Настоящие блоки труб невидимы и расположены углом",
+  "overpressure.ponder.curvature_tube.text_3": "Изогнутый участок считается одним непрерывным путём трубы.",
+
+  "overpressure.ponder.pneumatic_connection.header": "Пневмо-экстракторы",
+  "overpressure.ponder.pneumatic_connection.text_1": "Пневмо-коннекторы решают, выходят предметы из контейнера или входят в него.",
+  "overpressure.ponder.pneumatic_connection.text_2": "Режим экстрактора вытягивает предметы из контейнера в трубу.",
+  "overpressure.ponder.pneumatic_connection.text_3": "Режим вставки отправляет предметы из линии труб в контейнер.",
+  "overpressure.ponder.pneumatic_connection.text_4": "Поверните коннектор гаечным ключом, чтобы сменить сторону и направление.",
+
+  "overpressure.ponder.pneumatic_connection.text_5": "Поместите фильтр в экстрактор, чтобы выбрать предметы для извлечения.",
+  "overpressure.ponder.pneumatic_connection.text_6": "Сигнал редстоуна отключает экстрактор.Загоревшаяся обводка означает что экстрактор заблокирован",
+  "overpressure.ponder.pneumatic_connection.text_7": "Предметы, которые начали движения, продолжат путь до назначения.",
+
+  "overpressure.ponder.item_pump.header": "Улучшение насосом",
+  "overpressure.ponder.item_pump.text_1": "Обычная вакуумная линия может показаться слишком медленной.",
+  "overpressure.ponder.item_pump.text_2": "Замените центральную трубу насосом , чтобы ускорить движения предметов.",
+  "overpressure.ponder.item_pump.text_3": "Сам по себе насос не работает",
+  "overpressure.ponder.item_pump.text_4": "Для работы насосу требуется вращение от шестерни.",
+  "overpressure.ponder.item_pump.text_5": "Медленное вращение даёт насосу умеренную скорость переноса.",
+  "overpressure.ponder.item_pump.text_6": "Чем быстрее крутится шестерня, тем быстрее предметы движутся по линии."
+}

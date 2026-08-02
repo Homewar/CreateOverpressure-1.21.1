@@ -1,0 +1,13 @@
+{
+  "replace": false,
+  "values": [
+    "overpressure:pneumatic_tube",
+    "overpressure:curvature_pneumatic_tube",
+    "overpressure:andesite_encased_pneumatic_tube",
+    "overpressure:brass_encased_pneumatic_tube",
+    "overpressure:copper_encased_pneumatic_tube",
+    "overpressure:pneumatic_connection",
+    "overpressure:item_pump",
+    "overpressure:creative_item_pump"
+  ]
+}

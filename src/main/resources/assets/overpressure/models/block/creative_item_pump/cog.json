@@ -1,0 +1,6 @@
+{
+  "parent": "overpressure:block/item_pump/cog",
+  "textures": {
+    "2": "create:block/creative_casing"
+  }
+}

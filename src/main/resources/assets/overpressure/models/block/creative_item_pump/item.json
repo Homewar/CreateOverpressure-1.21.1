@@ -1,0 +1,7 @@
+{
+  "parent": "overpressure:block/item_pump/item",
+  "textures": {
+    "4": "create:block/creative_casing",
+    "particle": "create:block/creative_casing"
+  }
+}
