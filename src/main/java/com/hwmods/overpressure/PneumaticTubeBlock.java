@@ -429,6 +429,10 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
     }
 
     private boolean canNeighborAcceptConnection(BlockState neighborState, Direction directionFromNeighbor) {
+        if (neighborState.getBlock() instanceof DeviderBlock) {
+            return directionFromNeighbor == Direction.DOWN;
+        }
+
         if (neighborState.getBlock() instanceof CurvaturePneumaticTubeBlock) {
             return neighborState.getValue(getConnectionProperty(directionFromNeighbor));
         }

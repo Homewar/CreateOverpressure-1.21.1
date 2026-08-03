@@ -1,0 +1,15 @@
+{
+  "multipart": [
+    {
+      "when": { "axis": "x" },
+      "apply": { "model": "overpressure:block/devider/divider" }
+    },
+    {
+      "when": { "axis": "z" },
+      "apply": {
+        "model": "overpressure:block/devider/divider",
+        "y": 90
+      }
+    }
+  ]
+}

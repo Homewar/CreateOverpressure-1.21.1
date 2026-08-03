@@ -8,6 +8,7 @@
     "overpressure:copper_encased_pneumatic_tube",
     "overpressure:pneumatic_connection",
     "overpressure:item_pump",
-    "overpressure:creative_item_pump"
+    "overpressure:creative_item_pump",
+    "overpressure:devider"
   ]
 }

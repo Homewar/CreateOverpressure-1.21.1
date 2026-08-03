@@ -55,6 +55,26 @@ public class ModBlockEntities {
                             null
                     )
             );
+
+        public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<DeviderBlockEntity>> DEVIDER =
+            BLOCK_ENTITIES.register(
+                    "devider",
+                    () -> new BlockEntityType<>(
+                            DeviderBlockEntity::new,
+                            Set.of(ModBlocks.DEVIDER.get()),
+                            null
+                    )
+            );
+
+        public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<GrindRailBlockEntity>> GRIND_RAIL =
+            BLOCK_ENTITIES.register(
+                    "grind_rail",
+                    () -> new BlockEntityType<>(
+                            GrindRailBlockEntity::new,
+                            Set.of(ModBlocks.GRIND_RAIL.get()),
+                            null
+                    )
+            );
             
 
 

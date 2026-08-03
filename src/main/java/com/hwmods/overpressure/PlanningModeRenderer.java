@@ -64,7 +64,7 @@ public class PlanningModeRenderer {
 
         PneumaticTubeBlockItem.PlanResult result = start == null
                 ? tubeItem.planSingle(level, clickedPos, clickedFace)
-                : tubeItem.planClientSection(level, start, clickedPos, clickedFace);
+                : tubeItem.planClientSection(level, start, clickedPos, clickedFace, hit.getLocation());
 
         if (result.tubes().isEmpty() && start == null) {
             result = tubeItem.planSingle(level, clickedPos, clickedFace);

@@ -53,8 +53,13 @@ public class PneumaticConnectionBlockEntity extends SmartBlockEntity {
 
         Direction facing = getBlockState().getValue(PneumaticConnectionBlock.FACING);
         BlockPos firstTubePos = worldPosition.relative(facing);
-        if (!(level.getBlockState(firstTubePos).getBlock() instanceof PneumaticTubeBlock
-                || level.getBlockState(firstTubePos).getBlock() instanceof ItemPumpBlock)) {
+        if (!PneumaticLine.isPathNode(level, firstTubePos)) {
+            return;
+        }
+
+        ItemStack simulated = extractItems(level, source.handler(), true);
+
+        if (simulated.isEmpty()) {
             return;
         }
 
@@ -70,9 +75,7 @@ public class PneumaticConnectionBlockEntity extends SmartBlockEntity {
             return;
         }
 
-        ItemStack simulated = extractItems(level, source.handler(), true);
-
-        if (simulated.isEmpty() || !firstTube.canAcceptItem(simulated, path)) {
+        if (!firstTube.canAcceptItem(simulated, path)) {
             return;
         }
 
@@ -87,6 +90,7 @@ public class PneumaticConnectionBlockEntity extends SmartBlockEntity {
             return;
         }
 
+        TubeNetworkPathfinder.commitDeviderChoices(level, path);
         setChanged();
     }
 

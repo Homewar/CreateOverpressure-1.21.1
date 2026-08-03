@@ -1,14 +1,13 @@
 package com.hwmods.overpressure;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.PriorityQueue;
 import java.util.Queue;
-import java.util.Set;
 
 import javax.annotation.Nullable;
 
@@ -23,13 +22,21 @@ public final class TubeNetworkPathfinder {
             return new TubePath(List.of(), null);
         }
 
-        Queue<BlockPos> queue = new ArrayDeque<>();
-        Map<BlockPos, BlockPos> previous = new HashMap<>();
-        Set<BlockPos> visited = new HashSet<>();
+        if (isOccupiedTube(level, firstTube)) {
+            return new TubePath(List.of(), null);
+        }
 
-        queue.add(firstTube);
-        visited.add(sourceConnector);
-        visited.add(firstTube);
+        Queue<SearchNode> queue = new PriorityQueue<>(Comparator
+                .comparingInt((SearchNode node) -> node.score.branchPenalty)
+                .thenComparingInt(node -> node.score.distance)
+                .thenComparingLong(node -> node.sequence));
+        Map<BlockPos, BlockPos> previous = new HashMap<>();
+        Map<BlockPos, RouteScore> bestScores = new HashMap<>();
+        long sequence = 0;
+
+        RouteScore firstScore = new RouteScore(0, 0);
+        queue.add(new SearchNode(firstTube, firstScore, sequence++));
+        bestScores.put(firstTube, firstScore);
         previous.put(firstTube, sourceConnector);
 
         Direction firstDirection = getDirectionBetween(sourceConnector, firstTube);
@@ -42,13 +49,21 @@ public final class TubeNetworkPathfinder {
         BlockPos spillTarget = null;
 
         while (!queue.isEmpty()) {
-            BlockPos current = queue.remove();
+            SearchNode node = queue.remove();
+            BlockPos current = node.pos;
+            if (!node.score.equals(bestScores.get(current))) {
+                continue;
+            }
 
             if (!isPathNode(level, current)) {
                 continue;
             }
 
-            BlockPos targetConnector = findAdjacentInsertConnector(level, current, sourceConnector);
+            BlockPos targetConnector = findAdjacentInsertConnector(
+                    level,
+                    current,
+                    sourceConnector
+            );
 
             if (targetConnector != null) {
                 return new TubePath(buildPath(previous, sourceConnector, current), targetConnector);
@@ -56,21 +71,26 @@ public final class TubeNetworkPathfinder {
 
             BlockPos previousPos = previous.get(current);
             Direction forward = previousPos == null ? null : getDirectionBetween(previousPos, current);
-            if (forward != null) {
+            if (forward != null
+                    && !(level.getBlockEntity(current) instanceof DeviderBlockEntity)
+                    && !hasConnectedContinuation(level, current, previousPos)) {
                 BlockPos possibleSpillTarget = current.relative(forward);
                 List<BlockPos> possibleSpillPath = buildPath(previous, sourceConnector, current);
 
                 if (!isPathNode(level, possibleSpillTarget)
+                        && !(level.getBlockState(possibleSpillTarget).getBlock()
+                        instanceof PneumaticConnectionBlock)
                         && possibleSpillPath.size() > spillPath.size()) {
                     spillPath = possibleSpillPath;
                     spillTarget = possibleSpillTarget;
                 }
             }
 
-            for (Direction direction : Direction.values()) {
-                BlockPos next = current.relative(direction);
+            boolean hasFreeDeviderOutput = level.getBlockEntity(current) instanceof DeviderBlockEntity devider
+                    && hasFreeDeviderOutput(level, current, devider);
 
-                if (visited.contains(next)) {
+            for (BlockPos next : PneumaticLine.getForwardNeighbors(level, current)) {
+                if (next.equals(sourceConnector)) {
                     continue;
                 }
 
@@ -78,13 +98,27 @@ public final class TubeNetworkPathfinder {
                     continue;
                 }
 
-                if (!canTravelBetween(level, current, next, direction)) {
+                if (hasFreeDeviderOutput
+                        && isOccupiedTube(level, next)) {
                     continue;
                 }
 
-                visited.add(next);
+                if (!canTravelBetween(level, current, next)) {
+                    continue;
+                }
+
+                RouteScore nextScore = new RouteScore(
+                        node.score.branchPenalty + getDeviderBranchPenalty(level, current, next),
+                        node.score.distance + 1
+                );
+                RouteScore previousScore = bestScores.get(next);
+                if (previousScore != null && compareScores(previousScore, nextScore) <= 0) {
+                    continue;
+                }
+
+                bestScores.put(next, nextScore);
                 previous.put(next, current);
-                queue.add(next);
+                queue.add(new SearchNode(next, nextScore, sequence++));
             }
         }
 
@@ -93,6 +127,46 @@ public final class TubeNetworkPathfinder {
         }
 
         return new TubePath(List.of(), null);
+    }
+
+    private static boolean hasFreeDeviderOutput(
+            Level level,
+            BlockPos deviderPos,
+            DeviderBlockEntity devider
+    ) {
+        for (BlockPos output : devider.getOrderedOutputPositions()) {
+            if (isPathNode(level, output)
+                    && !isOccupiedTube(level, output)
+                    && canTravelBetween(level, deviderPos, output)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasConnectedContinuation(Level level, BlockPos current, BlockPos previous) {
+        for (BlockPos neighbor : PneumaticLine.getForwardNeighbors(level, current)) {
+            if (neighbor.equals(previous) || !isPathNode(level, neighbor)) {
+                continue;
+            }
+
+            if (canTravelBetween(level, current, neighbor)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static int getDeviderBranchPenalty(Level level, BlockPos from, BlockPos to) {
+        if (!(level.getBlockEntity(from) instanceof DeviderBlockEntity devider)) {
+            return 0;
+        }
+        return to.equals(devider.getOrderedOutputPositions().get(0)) ? 0 : 1;
+    }
+
+    private static int compareScores(RouteScore first, RouteScore second) {
+        int branchComparison = Integer.compare(first.branchPenalty, second.branchPenalty);
+        return branchComparison != 0 ? branchComparison : Integer.compare(first.distance, second.distance);
     }
 
     @Nullable
@@ -121,6 +195,11 @@ public final class TubeNetworkPathfinder {
         }
 
         return null;
+    }
+
+    private static boolean isOccupiedTube(Level level, BlockPos pos) {
+        return level.getBlockEntity(pos) instanceof PneumaticTubeBlockEntity tube
+                && tube.getMovingItem() != null;
     }
 
     private static List<BlockPos> buildPath(Map<BlockPos, BlockPos> previous, BlockPos start, BlockPos end) {
@@ -166,6 +245,29 @@ public final class TubeNetworkPathfinder {
         }
 
         return PneumaticLine.isTravelAllowed(level, from, to, movementDirection);
+    }
+
+    private static boolean canTravelBetween(Level level, BlockPos from, BlockPos to) {
+        if (level.getBlockEntity(from) instanceof DeviderBlockEntity
+                || level.getBlockEntity(to) instanceof DeviderBlockEntity) {
+            return PneumaticLine.isTravelAllowed(level, from, to);
+        }
+
+        Direction movementDirection = getDirectionBetween(from, to);
+        if (movementDirection == null) {
+            return PneumaticLine.isTravelAllowed(level, from, to);
+        }
+        return canTravelBetween(level, from, to, movementDirection);
+    }
+
+    public static void commitDeviderChoices(Level level, TubePath path) {
+        List<BlockPos> positions = path.tubePositions();
+        for (int index = 0; index + 1 < positions.size(); index++) {
+            if (level.getBlockEntity(positions.get(index)) instanceof DeviderBlockEntity devider
+                    && devider.isOutputPosition(positions.get(index + 1))) {
+                devider.markOutputUsed(positions.get(index + 1));
+            }
+        }
     }
 
     private static boolean strictTubeEndpointAllowsMovement(Level level, BlockPos pos, Direction movementDirection) {
@@ -219,5 +321,11 @@ public final class TubeNetworkPathfinder {
     }
 
     private TubeNetworkPathfinder() {
+    }
+
+    private record RouteScore(int branchPenalty, int distance) {
+    }
+
+    private record SearchNode(BlockPos pos, RouteScore score, long sequence) {
     }
 }

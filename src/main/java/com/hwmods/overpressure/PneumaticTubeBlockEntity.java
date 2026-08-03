@@ -238,6 +238,8 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         }
 
         if (movingItem.waitingForNextTube) {
+            tryRerouteBlockedDeviderOutput(level);
+
             if (!canMoveToNextPathNode(level)) {
                 return;
             }
@@ -280,6 +282,59 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         }
 
         moveToNextPathNode(level);
+    }
+
+    private boolean tryRerouteBlockedDeviderOutput(Level level) {
+        if (!(this instanceof DeviderBlockEntity devider)) {
+            return false;
+        }
+
+        int nextPathIndex = movingItem.pathIndex + 1;
+        if (nextPathIndex >= movingItem.path.size()) {
+            return false;
+        }
+
+        BlockPos blockedOutput = movingItem.path.get(nextPathIndex);
+        if (!devider.isOutputPosition(blockedOutput)
+                || (devider.isOutputEnabled(blockedOutput)
+                && (!(level.getBlockEntity(blockedOutput) instanceof PneumaticTubeBlockEntity blockedTube)
+                || blockedTube.movingItem == null))) {
+            return false;
+        }
+
+        for (BlockPos alternateOutput : devider.getOrderedOutputPositions()) {
+            if (alternateOutput.equals(blockedOutput)) {
+                continue;
+            }
+
+            TubePath alternatePath = TubeNetworkPathfinder.findPathToInsertConnector(
+                    level,
+                    worldPosition,
+                    alternateOutput
+            );
+            if (alternatePath.isEmpty()) {
+                continue;
+            }
+
+            List<BlockPos> reroutedPath = new java.util.ArrayList<>(
+                    movingItem.path.subList(0, movingItem.pathIndex + 1)
+            );
+            reroutedPath.addAll(alternatePath.tubePositions());
+            movingItem.path = reroutedPath;
+            movingItem.targetConnector = alternatePath.targetConnector();
+            movingItem.spillsAtEnd = alternatePath.spillsAtEnd();
+            movingItem.speedControllers = findSpeedControllers(reroutedPath);
+            movingItem.hasSpeedControllerCache = true;
+            movingItem.lastSpeedCheckGameTime = Long.MIN_VALUE;
+            movingItem.waitingForNextTube = false;
+            movingItem.waitingAtDestination = false;
+            devider.markOutputUsed(alternateOutput);
+            setChanged();
+            syncMovingItem(level);
+            return true;
+        }
+
+        return false;
     }
 
     private void moveToNextPathNode(Level level) {
@@ -492,6 +547,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         movingItem.waitingForNextTube = false;
         movingItem.progress = 0;
         movingItem.segmentProgress = 0.0f;
+        TubeNetworkPathfinder.commitDeviderChoices(level, extension);
         setChanged();
         syncMovingItem(level);
         return true;
@@ -529,12 +585,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
 
         BlockPos currentPos = movingItem.path.get(currentPathIndex);
         BlockPos nextPos = movingItem.path.get(nextPathIndex);
-        Direction firstDirection = Direction.getNearest(
-                nextPos.getX() - currentPos.getX(),
-                nextPos.getY() - currentPos.getY(),
-                nextPos.getZ() - currentPos.getZ()
-        );
-        if (!canMoveBetween(currentPos, nextPos, firstDirection)) {
+        if (!canMoveBetween(currentPos, nextPos)) {
             return false;
         }
 
@@ -543,12 +594,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         }
 
         BlockPos afterPumpPos = movingItem.path.get(nextPathIndex);
-        Direction secondDirection = Direction.getNearest(
-                afterPumpPos.getX() - nextPos.getX(),
-                afterPumpPos.getY() - nextPos.getY(),
-                afterPumpPos.getZ() - nextPos.getZ()
-        );
-        return canMoveBetween(nextPos, afterPumpPos, secondDirection);
+        return canMoveBetween(nextPos, afterPumpPos);
     }
 
     public MovingTubeItem getMovingItem() {
@@ -848,14 +894,13 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
                 moveTime = moveTime == 0 ? pump.getMoveTime() : Math.min(moveTime, pump.getMoveTime());
             }
 
-            for (Direction direction : Direction.values()) {
-                BlockPos next = current.relative(direction);
+            for (BlockPos next : PneumaticLine.getForwardNeighbors(level, current)) {
 
                 if (visited.contains(next)) {
                     continue;
                 }
 
-                if (!canMoveBetween(current, next, direction)) {
+                if (!canMoveBetween(current, next)) {
                     continue;
                 }
 
@@ -908,6 +953,21 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
             return true;
         }
 
+        return false;
+    }
+
+    private boolean canMoveBetween(BlockPos from, BlockPos to) {
+        BlockEntity fromBlockEntity = level.getBlockEntity(from);
+        BlockEntity toBlockEntity = level.getBlockEntity(to);
+        if (fromBlockEntity instanceof DeviderBlockEntity || toBlockEntity instanceof DeviderBlockEntity) {
+            return PneumaticLine.isTravelAllowed(level, from, to);
+        }
+
+        for (Direction direction : Direction.values()) {
+            if (from.relative(direction).equals(to)) {
+                return canMoveBetween(from, to, direction);
+            }
+        }
         return false;
     }
 

@@ -90,16 +90,43 @@ public final class SimulatedCompat {
             }
         }
 
+        if (state.getBlock() instanceof DeviderBlock) {
+            Direction.Axis outputAxis = state.getValue(DeviderBlock.AXIS);
+            for (Direction.AxisDirection axisDirection : Direction.AxisDirection.values()) {
+                Direction side = Direction.get(axisDirection, outputAxis);
+                BlockPos outputPos = pos.relative(side);
+                if (!visited.contains(outputPos)
+                        && level.getBlockState(outputPos).getBlock() instanceof CurvaturePneumaticTubeBlock) {
+                    connected.add(outputPos);
+                }
+            }
+        } else if (state.getBlock() instanceof CurvaturePneumaticTubeBlock) {
+            for (Direction side : Direction.Plane.HORIZONTAL) {
+                BlockPos deviderPos = pos.relative(side.getOpposite());
+                BlockState deviderState = level.getBlockState(deviderPos);
+                if (!visited.contains(deviderPos)
+                        && deviderState.getBlock() instanceof DeviderBlock
+                        && deviderState.getValue(DeviderBlock.AXIS) == side.getAxis()) {
+                    connected.add(deviderPos);
+                }
+            }
+        }
+
         return connected;
     }
 
     private static boolean isLineComponent(BlockState state) {
         return state.getBlock() instanceof PneumaticTubeBlock
                 || state.getBlock() instanceof ItemPumpBlock
-                || state.getBlock() instanceof PneumaticConnectionBlock;
+                || state.getBlock() instanceof PneumaticConnectionBlock
+                || state.getBlock() instanceof DeviderBlock;
     }
 
     private static boolean opensToward(BlockState state, Direction direction) {
+        if (state.getBlock() instanceof DeviderBlock) {
+            return direction == Direction.DOWN;
+        }
+
         if (state.getBlock() instanceof PneumaticTubeBlock) {
             return state.getValue(PneumaticTubeBlock.getConnectionProperty(direction));
         }

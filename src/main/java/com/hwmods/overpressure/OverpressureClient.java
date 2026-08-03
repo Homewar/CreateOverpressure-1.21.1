@@ -55,6 +55,14 @@ public class OverpressureClient {
                 ModBlockEntities.ITEM_PUMP.get(),
                 ItemPumpRenderer::new
         );
+        event.registerBlockEntityRenderer(
+                ModBlockEntities.DEVIDER.get(),
+                PneumaticTubeRenderer::new
+        );
+        event.registerBlockEntityRenderer(
+                ModBlockEntities.GRIND_RAIL.get(),
+                GrindRailRenderer::new
+        );
     }
 
     static void registerAdditionalModels(ModelEvent.RegisterAdditional event) {

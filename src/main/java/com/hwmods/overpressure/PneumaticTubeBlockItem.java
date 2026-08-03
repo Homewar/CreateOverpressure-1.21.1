@@ -2,16 +2,26 @@ package com.hwmods.overpressure;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import javax.annotation.Nullable;
 
+import com.simibubi.create.content.equipment.extendoGrip.ExtendoGripItem;
+import com.simibubi.create.infrastructure.config.AllConfigs;
+
+import net.createmod.catnip.placement.IPlacementHelper;
+import net.createmod.catnip.placement.PlacementHelpers;
+import net.createmod.catnip.placement.PlacementOffset;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
@@ -23,6 +33,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.material.Fluids;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
 public class PneumaticTubeBlockItem extends BlockItem {
@@ -34,9 +45,44 @@ public class PneumaticTubeBlockItem extends BlockItem {
     private static final int CURVATURE_CHECK_SAMPLES = 32;
     private static final double MIN_CURVATURE_RADIUS = 0.55;
     private static final double MAX_SECOND_DERIVATIVE = 36.0;
+    private final int placementHelperId;
 
     public PneumaticTubeBlockItem(Block block, Properties properties) {
         super(block, properties);
+        placementHelperId = PlacementHelpers.register(new StraightTubePlacementHelper());
+    }
+
+    @Override
+    public InteractionResult onItemUseFirst(ItemStack stack, UseOnContext context) {
+        Player player = context.getPlayer();
+
+        if (player == null || player.isShiftKeyDown()) {
+            return super.onItemUseFirst(stack, context);
+        }
+
+        Level level = context.getLevel();
+        BlockPos pos = context.getClickedPos();
+        BlockState state = level.getBlockState(pos);
+        IPlacementHelper helper = PlacementHelpers.get(placementHelperId);
+
+        if (!helper.matchesState(state)) {
+            return super.onItemUseFirst(stack, context);
+        }
+
+        BlockHitResult hit = new BlockHitResult(
+                context.getClickLocation(),
+                context.getClickedFace(),
+                pos,
+                true
+        );
+        PlacementOffset offset = helper.getOffset(player, level, state, pos, hit);
+
+        if (!offset.isSuccessful()) {
+            return super.onItemUseFirst(stack, context);
+        }
+
+        clearCurveStarts(player.getUUID());
+        return offset.placeInWorld(level, this, player, context.getHand(), hit).result();
     }
 
     @Override
@@ -59,6 +105,16 @@ public class PneumaticTubeBlockItem extends BlockItem {
             }
 
             return super.useOn(context);
+        }
+
+        CurveStart deviderStart = getDeviderCurveStart(
+                clickedPos,
+                clickedState,
+                clickedFace,
+                context.getClickLocation()
+        );
+        if (deviderStart != null) {
+            return selectOrConnectDevider(level, player, context.getItemInHand(), deviderStart);
         }
 
         // Прямой участок трубы (две соединённые стороны на одной оси) не может быть
@@ -105,7 +161,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
 
         CurveStart start = CURVE_STARTS.remove(playerId);
 
-        if (start != null && !canStartCurveFrom(level, start.pos, level.getBlockState(start.pos), start.direction)) {
+        if (start != null && !isCurveStartValid(level, start)) {
             start = null;
         }
 
@@ -126,6 +182,80 @@ public class PneumaticTubeBlockItem extends BlockItem {
         }
 
         return InteractionResult.CONSUME;
+    }
+
+    private InteractionResult selectOrConnectDevider(
+            Level level,
+            Player player,
+            ItemStack stack,
+            CurveStart selected
+    ) {
+        UUID playerId = player.getUUID();
+        Map<UUID, CurveStart> starts = level.isClientSide ? CLIENT_CURVE_STARTS : CURVE_STARTS;
+        CurveStart current = starts.get(playerId);
+
+        if (current != null && !isCurveStartValid(level, current)) {
+            starts.remove(playerId);
+            current = null;
+        }
+
+        if (current != null && !current.isDeviderPort()) {
+            CurveEnd originalStartAsEnd = new CurveEnd(current.pos, current.direction);
+
+            if (level.isClientSide) {
+                if (planSection(level, selected, originalStartAsEnd).valid()) {
+                    starts.remove(playerId);
+                }
+                return InteractionResult.SUCCESS;
+            }
+
+            starts.remove(playerId);
+            if (!buildTubeSection(level, player, stack, selected, originalStartAsEnd)) {
+                starts.put(playerId, current);
+            }
+            return InteractionResult.CONSUME;
+        }
+
+        if (selected.equals(current)) {
+            starts.remove(playerId);
+        } else {
+            starts.put(playerId, selected);
+        }
+
+        return level.isClientSide ? InteractionResult.SUCCESS : InteractionResult.CONSUME;
+    }
+
+    @Nullable
+    private CurveStart getDeviderCurveStart(
+            BlockPos pos,
+            BlockState state,
+            Direction clickedFace,
+            Vec3 clickLocation
+    ) {
+        if (!(state.getBlock() instanceof DeviderBlock)) {
+            return null;
+        }
+
+        double localX = clickLocation.x - pos.getX();
+        double localY = clickLocation.y - pos.getY();
+        double localZ = clickLocation.z - pos.getZ();
+        boolean insideBottomConnector = localX >= 0.25 && localX <= 0.75
+                && localZ >= 0.25 && localZ <= 0.75;
+        if (insideBottomConnector && localY <= 3.25 / 16.0) {
+            return new CurveStart(pos, Direction.DOWN, Direction.DOWN);
+        }
+
+        Direction.Axis axis = state.getValue(DeviderBlock.AXIS);
+        double coordinate = axis == Direction.Axis.X ? localX : localZ;
+        Direction side = clickedFace.getAxis() == axis
+                ? clickedFace
+                : Direction.get(
+                        coordinate >= 0.5
+                                ? Direction.AxisDirection.POSITIVE
+                                : Direction.AxisDirection.NEGATIVE,
+                        axis
+                );
+        return new CurveStart(pos, Direction.UP, side);
     }
 
     private boolean canPlaceSingleTubeInWater(BlockState state) {
@@ -158,7 +288,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
     }
 
     private boolean buildTubeSection(Level level, Player player, ItemStack stack, CurveStart start, CurveEnd end) {
-        BlockPos startPos = start.pos.relative(start.direction);
+        BlockPos startPos = getStartTubePos(start);
         BlockPos endPos = end.pos.relative(end.direction);
 
         if (startPos.equals(endPos)) {
@@ -170,17 +300,17 @@ public class PneumaticTubeBlockItem extends BlockItem {
             return false;
         }
 
-        if (!isStraight(startPos, endPos)) {
+        if (start.isDeviderOutput() || !isStraight(startPos, endPos)) {
             Direction endTravelDirection = end.direction.getOpposite();
 
-            if (getCurvePlaneFixedAxis(startPos, endPos, start.direction, endTravelDirection) == null) {
+            if (getCurvePlaneFixedAxis(start, startPos, endPos, endTravelDirection) == null) {
                 player.displayClientMessage(Component.literal("Tube curve endpoints must face inside one plane"), true);
                 return false;
             }
 
-            BezierData curve = createFullBezierCurve(startPos, endPos, start.direction, endTravelDirection);
+            BezierData curve = createFullBezierCurve(start, startPos, endPos, endTravelDirection);
 
-            if (!isCurveSmoothEnough(curve)) {
+            if (!start.isDeviderOutput() && !isCurveSmoothEnough(curve)) {
                 player.displayClientMessage(Component.literal("Tube curve is too sharp"), true);
                 return false;
             }
@@ -227,7 +357,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
     }
 
     private List<PlacedTube> buildPlacedTubes(CurveStart start, BlockPos startPos, CurveEnd end, BlockPos endPos) {
-        if (isStraight(startPos, endPos)) {
+        if (!start.isDeviderOutput() && isStraight(startPos, endPos)) {
             Direction direction = directionAlongLine(startPos, endPos);
 
             if (direction == null
@@ -242,25 +372,28 @@ public class PneumaticTubeBlockItem extends BlockItem {
         Direction firstLegDirection = start.direction;
         Direction secondLegDirection = end.direction.getOpposite();
 
-        Direction.Axis fixedAxis = getCurvePlaneFixedAxis(startPos, endPos, firstLegDirection, secondLegDirection);
+        Direction.Axis fixedAxis = getCurvePlaneFixedAxis(start, startPos, endPos, secondLegDirection);
 
         if (fixedAxis == null) {
             return List.of();
         }
 
-        BezierData fullCurve = createFullBezierCurve(startPos, endPos, firstLegDirection, secondLegDirection);
-        List<BlockPos> curvePositions = buildRightAnglePathPositions(
-                startPos,
-                endPos,
-                firstLegDirection,
-                secondLegDirection
-        );
+        BezierData fullCurve = createFullBezierCurve(start, startPos, endPos, secondLegDirection);
+        List<BlockPos> curvePositions = start.isDeviderOutput()
+                ? List.of()
+                : buildRightAnglePathPositions(startPos, endPos, firstLegDirection, secondLegDirection);
 
         if (curvePositions.isEmpty()) {
             curvePositions = buildCurvePathPositions(startPos, endPos, fullCurve, fixedAxis);
         }
 
         if (curvePositions.size() < 2) {
+            return List.of();
+        }
+
+        Set<BlockPos> uniquePositions = new HashSet<>(curvePositions);
+
+        if (uniquePositions.size() != curvePositions.size()) {
             return List.of();
         }
 
@@ -274,19 +407,21 @@ public class PneumaticTubeBlockItem extends BlockItem {
         for (int i = 0; i < curvePositions.size(); i++) {
             BlockPos current = curvePositions.get(i);
             Direction previousDirection = i == 0
-                    ? start.direction.getOpposite()
+                    ? (start.isDeviderOutput() ? null : start.direction.getOpposite())
                     : directionBetween(current, curvePositions.get(i - 1));
             Direction nextDirection = i == curvePositions.size() - 1
                     ? end.direction.getOpposite()
                     : directionBetween(current, curvePositions.get(i + 1));
 
-            if (previousDirection == null || nextDirection == null) {
+            if ((previousDirection == null && (!start.isDeviderOutput() || i != 0)) || nextDirection == null) {
                 return List.of();
             }
 
             tubes.add(new PlacedTube(
                     current,
-                    createTubeState(true, previousDirection, nextDirection),
+                    previousDirection == null
+                            ? createTubeState(true, nextDirection)
+                            : createTubeState(true, previousDirection, nextDirection),
                     offsetBezier(curveSegments.get(i), Vec3.atLowerCornerOf(current))
             ));
         }
@@ -366,7 +501,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
         };
     }
 
-    private BlockState createTubeState(boolean curvature, Direction first, Direction second) {
+    private BlockState createTubeState(boolean curvature, Direction... connections) {
         BlockState state = (curvature ? ModBlocks.CURVATURE_PNEUMATIC_TUBE.get() : ModBlocks.PNEUMATIC_TUBE.get())
                 .defaultBlockState();
 
@@ -384,9 +519,10 @@ public class PneumaticTubeBlockItem extends BlockItem {
             state = state.setValue(PneumaticTubeBlock.getConnectionProperty(direction), false);
         }
 
-        return state
-                .setValue(PneumaticTubeBlock.getConnectionProperty(first), true)
-                .setValue(PneumaticTubeBlock.getConnectionProperty(second), true);
+        for (Direction connection : connections) {
+            state = state.setValue(PneumaticTubeBlock.getConnectionProperty(connection), true);
+        }
+        return state.setValue(PneumaticTubeBlock.HAS_CONNECTION, connections.length > 0);
     }
 
     private List<BlockPos> buildCurvePathPositions(BlockPos startPos, BlockPos endPos, BezierData renderCurve, Direction.Axis fixedAxis) {
@@ -417,11 +553,19 @@ public class PneumaticTubeBlockItem extends BlockItem {
             }
 
             current = current.relative(step);
-
-            if (!current.equals(positions.get(positions.size() - 1))) {
-                positions.add(current);
-            }
+            appendLoopErasedPosition(positions, current);
         }
+    }
+
+    private void appendLoopErasedPosition(List<BlockPos> positions, BlockPos pos) {
+        int existingIndex = positions.indexOf(pos);
+
+        if (existingIndex < 0) {
+            positions.add(pos);
+            return;
+        }
+
+        positions.subList(existingIndex + 1, positions.size()).clear();
     }
 
     @Nullable
@@ -466,19 +610,29 @@ public class PneumaticTubeBlockItem extends BlockItem {
     }
 
     private BezierData createFullBezierCurve(
+            CurveStart start,
             BlockPos startPos,
             BlockPos endPos,
-            Direction incomingDirection,
             Direction outgoingDirection
     ) {
-        Vec3 incoming = Vec3.atLowerCornerOf(incomingDirection.getNormal());
-        Vec3 outgoing = Vec3.atLowerCornerOf(outgoingDirection.getNormal());
-        Vec3 startCenter = Vec3.atCenterOf(startPos);
-        Vec3 endCenter = Vec3.atCenterOf(endPos);
+        Vec3 incoming;
+        Vec3 p0;
+        if (start.isDeviderOutput()) {
+            Direction side = start.deviderSide;
+            incoming = new Vec3(side.getStepX(), 1.0, side.getStepZ()).normalize();
+            p0 = Vec3.atLowerCornerOf(start.pos).add(DeviderBlockEntity.getLocalOutputPoint(side));
+        } else {
+            incoming = Vec3.atLowerCornerOf(start.direction.getNormal());
+            p0 = Vec3.atCenterOf(startPos).subtract(incoming.scale(0.5));
+        }
 
-        Vec3 p0 = startCenter.subtract(incoming.scale(0.5));
+        Vec3 outgoing = Vec3.atLowerCornerOf(outgoingDirection.getNormal());
+        Vec3 endCenter = Vec3.atCenterOf(endPos);
         Vec3 p3 = endCenter.add(outgoing.scale(0.5));
-        double handleLength = Math.max(1.5, p0.distanceTo(p3) * 0.45);
+        double distance = p0.distanceTo(p3);
+        double handleLength = start.isDeviderOutput()
+                ? Math.max(0.35, distance * 0.35)
+                : Math.max(1.5, distance * 0.45);
 
         Vec3 p1 = p0.add(incoming.scale(handleLength));
         Vec3 p2 = p3.subtract(outgoing.scale(handleLength));
@@ -728,6 +882,33 @@ public class PneumaticTubeBlockItem extends BlockItem {
                 || startPos.getZ() == endPos.getZ();
     }
 
+    private BlockPos getStartTubePos(CurveStart start) {
+        if (start.isDeviderOutput()) {
+            return start.pos.relative(start.deviderSide);
+        }
+        return start.pos.relative(start.direction);
+    }
+
+    @Nullable
+    private Direction.Axis getCurvePlaneFixedAxis(
+            CurveStart start,
+            BlockPos startPos,
+            BlockPos endPos,
+            Direction endTravelDirection
+    ) {
+        if (!start.isDeviderOutput()) {
+            return getCurvePlaneFixedAxis(startPos, endPos, start.direction, endTravelDirection);
+        }
+
+        Direction.Axis fixedAxis = start.deviderSide.getAxis() == Direction.Axis.X
+                ? Direction.Axis.Z
+                : Direction.Axis.X;
+        return getCoordinate(startPos, fixedAxis) == getCoordinate(endPos, fixedAxis)
+                && endTravelDirection.getAxis() != fixedAxis
+                ? fixedAxis
+                : null;
+    }
+
     @Nullable
     private Direction.Axis getCurvePlaneFixedAxis(
             BlockPos startPos,
@@ -793,7 +974,22 @@ public class PneumaticTubeBlockItem extends BlockItem {
     private record PlacedTube(BlockPos pos, BlockState state, @Nullable BezierData bezier) {
     }
 
-    public record CurveStart(BlockPos pos, Direction direction) {
+    public record CurveStart(BlockPos pos, Direction direction, @Nullable Direction deviderSide) {
+        public CurveStart(BlockPos pos, Direction direction) {
+            this(pos, direction, null);
+        }
+
+        public boolean isDeviderOutput() {
+            return deviderSide != null && deviderSide.getAxis().isHorizontal();
+        }
+
+        public boolean isDeviderInput() {
+            return deviderSide == Direction.DOWN;
+        }
+
+        public boolean isDeviderPort() {
+            return deviderSide != null;
+        }
     }
 
     public record CurveEnd(BlockPos pos, Direction direction) {
@@ -880,7 +1076,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
     }
 
     private PlanResult planSection(Level level, CurveStart start, CurveEnd end) {
-        BlockPos startPos = start.pos.relative(start.direction);
+        BlockPos startPos = getStartTubePos(start);
         BlockPos endPos = end.pos.relative(end.direction);
 
         if (startPos.equals(endPos)) {
@@ -891,16 +1087,16 @@ public class PneumaticTubeBlockItem extends BlockItem {
             return new PlanResult(List.of(), "Tube curve must stay in one fixed X/Y/Z plane");
         }
 
-        if (!isStraight(startPos, endPos)) {
+        if (start.isDeviderOutput() || !isStraight(startPos, endPos)) {
             Direction endTravelDirection = end.direction.getOpposite();
 
-            if (getCurvePlaneFixedAxis(startPos, endPos, start.direction, endTravelDirection) == null) {
+            if (getCurvePlaneFixedAxis(start, startPos, endPos, endTravelDirection) == null) {
                 return new PlanResult(List.of(), "Tube curve endpoints must face inside one plane");
             }
 
-            BezierData curve = createFullBezierCurve(startPos, endPos, start.direction, endTravelDirection);
+            BezierData curve = createFullBezierCurve(start, startPos, endPos, endTravelDirection);
 
-            if (!isCurveSmoothEnough(curve)) {
+            if (!start.isDeviderOutput() && !isCurveSmoothEnough(curve)) {
                 return new PlanResult(List.of(), "Tube curve is too sharp");
             }
         }
@@ -939,10 +1135,150 @@ public class PneumaticTubeBlockItem extends BlockItem {
     }
 
     public boolean isCurveStartValid(Level level, CurveStart start) {
+        if (start.isDeviderPort()) {
+            BlockState state = level.getBlockState(start.pos);
+            return state.getBlock() instanceof DeviderBlock
+                    && (start.isDeviderInput()
+                    || start.deviderSide.getAxis() == state.getValue(DeviderBlock.AXIS));
+        }
         return canStartCurveFrom(level, start.pos, level.getBlockState(start.pos), start.direction);
     }
 
-    public PlanResult planClientSection(Level level, CurveStart start, BlockPos clickedPos, Direction clickedFace) {
+    public PlanResult planClientSection(
+            Level level,
+            CurveStart start,
+            BlockPos clickedPos,
+            Direction clickedFace,
+            Vec3 clickLocation
+    ) {
+        CurveStart deviderEnd = getDeviderCurveStart(
+                clickedPos,
+                level.getBlockState(clickedPos),
+                clickedFace,
+                clickLocation
+        );
+        if (deviderEnd != null && !start.isDeviderPort()) {
+            return planSection(level, deviderEnd, new CurveEnd(start.pos, start.direction));
+        }
+
         return planSection(level, start, new CurveEnd(clickedPos, clickedFace));
+    }
+
+    private static class StraightTubePlacementHelper implements IPlacementHelper {
+        @Override
+        public java.util.function.Predicate<ItemStack> getItemPredicate() {
+            return stack -> stack.getItem() instanceof PneumaticTubeBlockItem;
+        }
+
+        @Override
+        public java.util.function.Predicate<BlockState> getStatePredicate() {
+            return state -> countConnections(state) == 2 && getAxis(state) != null;
+        }
+
+        @Override
+        public PlacementOffset getOffset(
+                Player player,
+                Level level,
+                BlockState state,
+                BlockPos pos,
+                BlockHitResult hit
+        ) {
+            Direction.Axis axis = getAxis(state);
+
+            if (axis == null) {
+                return PlacementOffset.fail();
+            }
+
+            for (Direction direction : IPlacementHelper.orderedByDistanceOnlyAxis(pos, hit.getLocation(), axis)) {
+                int range = getPlacementAssistRange(player);
+                int attachedTubes = countAttachedTubes(level, pos, direction, axis);
+
+                if (attachedTubes >= range) {
+                    continue;
+                }
+
+                BlockPos placementPos = pos.relative(direction, attachedTubes + 1);
+
+                if (!level.getBlockState(placementPos).canBeReplaced()) {
+                    continue;
+                }
+
+                return PlacementOffset.success(
+                        placementPos,
+                        ignored -> ModBlocks.PNEUMATIC_TUBE.get()
+                                .getTubeStateForPlacement(level, placementPos)
+                );
+            }
+
+            return PlacementOffset.fail();
+        }
+
+        private static int countAttachedTubes(
+                Level level,
+                BlockPos pos,
+                Direction direction,
+                Direction.Axis axis
+        ) {
+            int count = 0;
+            BlockPos checkPos = pos.relative(direction);
+
+            while (getAxis(level.getBlockState(checkPos)) == axis) {
+                count++;
+                checkPos = checkPos.relative(direction);
+            }
+
+            return count;
+        }
+
+        private static int getPlacementAssistRange(Player player) {
+            int range = AllConfigs.server().equipment.placementAssistRange.get();
+            AttributeInstance reach = player.getAttribute(Attributes.BLOCK_INTERACTION_RANGE);
+
+            if (reach != null && reach.hasModifier(ExtendoGripItem.singleRangeAttributeModifier.id())) {
+                range += 4;
+            }
+
+            return range;
+        }
+
+        @Nullable
+        private static Direction.Axis getAxis(BlockState state) {
+            if (!(state.getBlock() instanceof PneumaticTubeBlock)
+                    || state.getBlock() instanceof CurvaturePneumaticTubeBlock) {
+                return null;
+            }
+
+            Direction.Axis axis = null;
+
+            for (Direction direction : Direction.values()) {
+                if (!state.getValue(PneumaticTubeBlock.getConnectionProperty(direction))) {
+                    continue;
+                }
+
+                if (axis != null && axis != direction.getAxis()) {
+                    return null;
+                }
+
+                axis = direction.getAxis();
+            }
+
+            return axis;
+        }
+
+        private static int countConnections(BlockState state) {
+            if (!(state.getBlock() instanceof PneumaticTubeBlock)) {
+                return 0;
+            }
+
+            int connections = 0;
+
+            for (Direction direction : Direction.values()) {
+                if (state.getValue(PneumaticTubeBlock.getConnectionProperty(direction))) {
+                    connections++;
+                }
+            }
+
+            return connections;
+        }
     }
 }

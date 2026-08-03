@@ -133,6 +133,16 @@ public class PneumaticTubeRenderer implements BlockEntityRenderer<PneumaticTubeB
             return curveDirection;
         }
 
+        if (tube instanceof DeviderBlockEntity && item.pathIndex + 1 < item.path.size()) {
+            BlockPos next = item.path.get(item.pathIndex + 1);
+            Direction side = Direction.getNearest(
+                    next.getX() - tube.getBlockPos().getX(),
+                    0,
+                    next.getZ() - tube.getBlockPos().getZ()
+            );
+            return new Vec3(side.getStepX(), 1.0, side.getStepZ()).normalize();
+        }
+
         BlockPos from = tube.getBlockPos();
         BlockPos toward = item.waitingAtDestination
                 ? item.targetConnector
@@ -249,6 +259,18 @@ public class PneumaticTubeRenderer implements BlockEntityRenderer<PneumaticTubeB
         BlockPos segmentPos = item.path.get(pathIndex);
         Vec3 offset = Vec3.atLowerCornerOf(segmentPos.subtract(currentPos));
         BlockEntity segmentBlockEntity = tube.getLevel() == null ? null : tube.getLevel().getBlockEntity(segmentPos);
+
+        if (segmentBlockEntity instanceof DeviderBlockEntity && pathIndex + 1 < item.path.size()) {
+            BlockPos next = item.path.get(pathIndex + 1);
+            Direction side = Direction.getNearest(
+                    next.getX() - segmentPos.getX(),
+                    0,
+                    next.getZ() - segmentPos.getZ()
+            );
+            Vec3 center = offset.add(0.5, 0.5, 0.5);
+            Vec3 output = offset.add(DeviderBlockEntity.getLocalOutputPoint(side));
+            return center.scale(1.0 - progress).add(output.scale(progress));
+        }
 
         if (segmentBlockEntity instanceof CurvaturePneumaticTubeEntity curvatureTube) {
             float curveProgress = isCurveReversed(currentPos, item, pathIndex, curvatureTube)
