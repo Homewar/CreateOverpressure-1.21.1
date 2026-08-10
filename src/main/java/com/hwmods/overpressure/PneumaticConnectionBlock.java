@@ -270,8 +270,12 @@ public class PneumaticConnectionBlock extends BaseEntityBlock implements IWrench
             return true;
         }
 
-        return state.getBlock() instanceof ItemPumpBlock pump
-                && pump.canTravelTo(state, direction.getOpposite());
+        return (state.getBlock() instanceof ItemPumpBlock pump
+                && pump.canTravelTo(state, direction.getOpposite()))
+                || (state.getBlock() instanceof ValveBlock valve
+                && valve.canTravelTo(state, direction.getOpposite()))
+                || (state.getBlock() instanceof ClogSensorBlock sensor
+                && sensor.canTravelTo(state, direction.getOpposite()));
     }
 
     private boolean hasInventory(LevelAccessor level, BlockPos pos, Direction direction) {

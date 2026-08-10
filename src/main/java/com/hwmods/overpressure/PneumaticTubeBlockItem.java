@@ -236,26 +236,25 @@ public class PneumaticTubeBlockItem extends BlockItem {
             return null;
         }
 
-        double localX = clickLocation.x - pos.getX();
-        double localY = clickLocation.y - pos.getY();
-        double localZ = clickLocation.z - pos.getZ();
-        boolean insideBottomConnector = localX >= 0.25 && localX <= 0.75
-                && localZ >= 0.25 && localZ <= 0.75;
-        if (insideBottomConnector && localY <= 3.25 / 16.0) {
-            return new CurveStart(pos, Direction.DOWN, Direction.DOWN);
+        Vec3 localClick = clickLocation.subtract(Vec3.atLowerCornerOf(pos));
+        Direction input = state.getValue(DeviderBlock.INPUT);
+        Direction main = input.getOpposite();
+        Direction left = DeviderBlock.getLeftOutputDirection(state);
+        Direction right = left.getOpposite();
+        Vec3 inputPoint = new Vec3(0.5, 0.5, 0.5)
+                .add(Vec3.atLowerCornerOf(input.getNormal()).scale(0.5));
+        Vec3 leftPoint = DeviderBlockEntity.getLocalOutputPoint(left, input);
+        Vec3 rightPoint = DeviderBlockEntity.getLocalOutputPoint(right, input);
+
+        double inputDistance = localClick.distanceToSqr(inputPoint);
+        double leftDistance = localClick.distanceToSqr(leftPoint);
+        double rightDistance = localClick.distanceToSqr(rightPoint);
+        if (inputDistance <= leftDistance && inputDistance <= rightDistance) {
+            return new CurveStart(pos, input, input);
         }
 
-        Direction.Axis axis = state.getValue(DeviderBlock.AXIS);
-        double coordinate = axis == Direction.Axis.X ? localX : localZ;
-        Direction side = clickedFace.getAxis() == axis
-                ? clickedFace
-                : Direction.get(
-                        coordinate >= 0.5
-                                ? Direction.AxisDirection.POSITIVE
-                                : Direction.AxisDirection.NEGATIVE,
-                        axis
-                );
-        return new CurveStart(pos, Direction.UP, side);
+        Direction side = leftDistance <= rightDistance ? left : right;
+        return new CurveStart(pos, main, side);
     }
 
     private boolean canPlaceSingleTubeInWater(BlockState state) {
@@ -619,8 +618,12 @@ public class PneumaticTubeBlockItem extends BlockItem {
         Vec3 p0;
         if (start.isDeviderOutput()) {
             Direction side = start.deviderSide;
-            incoming = new Vec3(side.getStepX(), 1.0, side.getStepZ()).normalize();
-            p0 = Vec3.atLowerCornerOf(start.pos).add(DeviderBlockEntity.getLocalOutputPoint(side));
+            Direction input = start.direction.getOpposite();
+            incoming = Vec3.atLowerCornerOf(side.getNormal())
+                    .add(Vec3.atLowerCornerOf(start.direction.getNormal()))
+                    .normalize();
+            p0 = Vec3.atLowerCornerOf(start.pos)
+                    .add(DeviderBlockEntity.getLocalOutputPoint(side, input));
         } else {
             incoming = Vec3.atLowerCornerOf(start.direction.getNormal());
             p0 = Vec3.atCenterOf(startPos).subtract(incoming.scale(0.5));
@@ -787,6 +790,14 @@ public class PneumaticTubeBlockItem extends BlockItem {
             return state.getValue(BlockStateProperties.FACING).getAxis() == direction.getAxis();
         }
 
+        if (state.getBlock() instanceof ValveBlock) {
+            return state.getValue(BlockStateProperties.FACING).getAxis() == direction.getAxis();
+        }
+
+        if (state.getBlock() instanceof ClogSensorBlock) {
+            return state.getValue(BlockStateProperties.FACING).getAxis() == direction.getAxis();
+        }
+
         if (!(state.getBlock() instanceof PneumaticTubeBlock)) {
             return false;
         }
@@ -900,9 +911,16 @@ public class PneumaticTubeBlockItem extends BlockItem {
             return getCurvePlaneFixedAxis(startPos, endPos, start.direction, endTravelDirection);
         }
 
-        Direction.Axis fixedAxis = start.deviderSide.getAxis() == Direction.Axis.X
-                ? Direction.Axis.Z
-                : Direction.Axis.X;
+        Direction.Axis fixedAxis = null;
+        for (Direction.Axis axis : Direction.Axis.values()) {
+            if (axis != start.deviderSide.getAxis() && axis != start.direction.getAxis()) {
+                fixedAxis = axis;
+                break;
+            }
+        }
+        if (fixedAxis == null) {
+            return null;
+        }
         return getCoordinate(startPos, fixedAxis) == getCoordinate(endPos, fixedAxis)
                 && endTravelDirection.getAxis() != fixedAxis
                 ? fixedAxis
@@ -980,11 +998,11 @@ public class PneumaticTubeBlockItem extends BlockItem {
         }
 
         public boolean isDeviderOutput() {
-            return deviderSide != null && deviderSide.getAxis().isHorizontal();
+            return deviderSide != null && deviderSide.getAxis() != direction.getAxis();
         }
 
         public boolean isDeviderInput() {
-            return deviderSide == Direction.DOWN;
+            return deviderSide != null && deviderSide == direction;
         }
 
         public boolean isDeviderPort() {
@@ -1139,7 +1157,10 @@ public class PneumaticTubeBlockItem extends BlockItem {
             BlockState state = level.getBlockState(start.pos);
             return state.getBlock() instanceof DeviderBlock
                     && (start.isDeviderInput()
-                    || start.deviderSide.getAxis() == state.getValue(DeviderBlock.AXIS));
+                    ? start.direction == state.getValue(DeviderBlock.INPUT)
+                    : start.direction == state.getValue(DeviderBlock.INPUT).getOpposite()
+                    && (start.deviderSide == DeviderBlock.getLeftOutputDirection(state)
+                    || start.deviderSide == DeviderBlock.getRightOutputDirection(state)));
         }
         return canStartCurveFrom(level, start.pos, level.getBlockState(start.pos), start.direction);
     }

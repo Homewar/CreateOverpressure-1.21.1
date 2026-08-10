@@ -14,6 +14,8 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 
 public class ItemPumpBlockEntity extends KineticBlockEntity implements IHaveGoggleInformation {
+    private static final float RPM_TICK_SCALE = 1024.0f;
+
     public ItemPumpBlockEntity(BlockPos pos, BlockState state) {
         this(ModBlockEntities.ITEM_PUMP.get(), pos, state);
     }
@@ -25,6 +27,16 @@ public class ItemPumpBlockEntity extends KineticBlockEntity implements IHaveGogg
     @Override
     public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
         super.addBehaviours(behaviours);
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    public void setBlockState(BlockState blockState) {
+        BlockState previousState = getBlockState();
+        super.setBlockState(blockState);
+        if (level != null && !previousState.equals(blockState)) {
+            PneumaticTubeBlockEntity.invalidateTransportTopologyAt(level, worldPosition);
+        }
     }
 
     @Override
@@ -47,8 +59,11 @@ public class ItemPumpBlockEntity extends KineticBlockEntity implements IHaveGogg
             return 0;
         }
 
-        return Math.max(PneumaticTubeBlockEntity.MIN_PUMPED_MOVE_TIME,
-                PneumaticTubeBlockEntity.BASE_MOVE_TIME - Math.round(speed / 8.0f));
+        int moveTime = (int) Math.ceil(RPM_TICK_SCALE / speed);
+        return Math.max(
+                PneumaticTubeBlockEntity.MIN_PUMPED_MOVE_TIME,
+                Math.min(PneumaticTubeBlockEntity.BASE_MOVE_TIME, moveTime)
+        );
     }
 
     public boolean isRunning() {

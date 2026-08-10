@@ -14,11 +14,22 @@ public class DeviderModeSlot extends ValueBoxTransform {
 
     @Override
     public Vec3 getLocalOffset(LevelAccessor level, BlockPos pos, BlockState state) {
-        return new Vec3(0.5, SLOT_HEIGHT, 0.5);
+        net.minecraft.core.Direction face = state.getValue(DeviderBlock.INPUT).getOpposite();
+        return new Vec3(0.5, 0.5, 0.5).add(
+                Vec3.atLowerCornerOf(face.getNormal()).scale(SLOT_HEIGHT - 0.5)
+        );
     }
 
     @Override
     public void rotate(LevelAccessor level, BlockPos pos, BlockState state, PoseStack poseStack) {
-        poseStack.mulPose(Axis.XP.rotationDegrees(90));
+        switch (state.getValue(DeviderBlock.INPUT).getOpposite()) {
+            case UP -> poseStack.mulPose(Axis.XP.rotationDegrees(90));
+            case DOWN -> poseStack.mulPose(Axis.XP.rotationDegrees(-90));
+            case SOUTH -> poseStack.mulPose(Axis.YP.rotationDegrees(180));
+            case EAST -> poseStack.mulPose(Axis.YP.rotationDegrees(90));
+            case WEST -> poseStack.mulPose(Axis.YP.rotationDegrees(-90));
+            case NORTH -> {
+            }
+        }
     }
 }

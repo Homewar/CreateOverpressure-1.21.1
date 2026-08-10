@@ -38,6 +38,10 @@ public class CurvaturePneumaticTubeEntity extends PneumaticTubeBlockEntity {
     }
 
     public void setCurve(Vec3 p0, Vec3 p1, Vec3 p2, Vec3 p3) {
+        boolean changed = !this.p0.equals(p0)
+                || !this.p1.equals(p1)
+                || !this.p2.equals(p2)
+                || !this.p3.equals(p3);
         this.p0 = p0;
         this.p1 = p1;
         this.p2 = p2;
@@ -45,6 +49,9 @@ public class CurvaturePneumaticTubeEntity extends PneumaticTubeBlockEntity {
         setChanged();
 
         if (level != null) {
+            if (changed) {
+                PneumaticTubeBlockEntity.invalidateClientPathAt(level, worldPosition);
+            }
             level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
         }
     }
@@ -101,6 +108,10 @@ public class CurvaturePneumaticTubeEntity extends PneumaticTubeBlockEntity {
 
     @Override
     protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
+        Vec3 previousP0 = p0;
+        Vec3 previousP1 = p1;
+        Vec3 previousP2 = p2;
+        Vec3 previousP3 = p3;
         super.read(tag, registries, clientPacket);
         p0 = loadPoint(tag, "p0", p0);
         p1 = loadPoint(tag, "p1", p1);
@@ -109,6 +120,14 @@ public class CurvaturePneumaticTubeEntity extends PneumaticTubeBlockEntity {
 
         if (tag.hasUUID("section_id")) {
             sectionId = tag.getUUID("section_id");
+        }
+
+        if (clientPacket && level != null
+                && (!previousP0.equals(p0)
+                || !previousP1.equals(p1)
+                || !previousP2.equals(p2)
+                || !previousP3.equals(p3))) {
+            PneumaticTubeBlockEntity.invalidateClientPathAt(level, worldPosition);
         }
     }
 

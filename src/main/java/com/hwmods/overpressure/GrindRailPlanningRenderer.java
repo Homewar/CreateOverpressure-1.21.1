@@ -39,7 +39,8 @@ public final class GrindRailPlanningRenderer {
                 start,
                 hit.getBlockPos(),
                 hit.getDirection(),
-                hit.getLocation()
+                hit.getLocation(),
+                player.getDirection()
         );
         if (plan.p0() == null) {
             return;

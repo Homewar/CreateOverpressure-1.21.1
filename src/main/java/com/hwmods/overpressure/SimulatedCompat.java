@@ -91,9 +91,9 @@ public final class SimulatedCompat {
         }
 
         if (state.getBlock() instanceof DeviderBlock) {
-            Direction.Axis outputAxis = state.getValue(DeviderBlock.AXIS);
-            for (Direction.AxisDirection axisDirection : Direction.AxisDirection.values()) {
-                Direction side = Direction.get(axisDirection, outputAxis);
+            for (Direction side : List.of(
+                    DeviderBlock.getLeftOutputDirection(state),
+                    DeviderBlock.getRightOutputDirection(state))) {
                 BlockPos outputPos = pos.relative(side);
                 if (!visited.contains(outputPos)
                         && level.getBlockState(outputPos).getBlock() instanceof CurvaturePneumaticTubeBlock) {
@@ -101,12 +101,13 @@ public final class SimulatedCompat {
                 }
             }
         } else if (state.getBlock() instanceof CurvaturePneumaticTubeBlock) {
-            for (Direction side : Direction.Plane.HORIZONTAL) {
+            for (Direction side : Direction.values()) {
                 BlockPos deviderPos = pos.relative(side.getOpposite());
                 BlockState deviderState = level.getBlockState(deviderPos);
                 if (!visited.contains(deviderPos)
                         && deviderState.getBlock() instanceof DeviderBlock
-                        && deviderState.getValue(DeviderBlock.AXIS) == side.getAxis()) {
+                        && (DeviderBlock.getLeftOutputDirection(deviderState) == side
+                        || DeviderBlock.getRightOutputDirection(deviderState) == side)) {
                     connected.add(deviderPos);
                 }
             }
@@ -118,13 +119,15 @@ public final class SimulatedCompat {
     private static boolean isLineComponent(BlockState state) {
         return state.getBlock() instanceof PneumaticTubeBlock
                 || state.getBlock() instanceof ItemPumpBlock
+                || state.getBlock() instanceof ValveBlock
+                || state.getBlock() instanceof ClogSensorBlock
                 || state.getBlock() instanceof PneumaticConnectionBlock
                 || state.getBlock() instanceof DeviderBlock;
     }
 
     private static boolean opensToward(BlockState state, Direction direction) {
         if (state.getBlock() instanceof DeviderBlock) {
-            return direction == Direction.DOWN;
+            return direction == state.getValue(DeviderBlock.INPUT);
         }
 
         if (state.getBlock() instanceof PneumaticTubeBlock) {
@@ -133,6 +136,14 @@ public final class SimulatedCompat {
 
         if (state.getBlock() instanceof ItemPumpBlock pump) {
             return pump.canTravelTo(state, direction);
+        }
+
+        if (state.getBlock() instanceof ValveBlock valve) {
+            return valve.canTravelTo(state, direction);
+        }
+
+        if (state.getBlock() instanceof ClogSensorBlock sensor) {
+            return sensor.canTravelTo(state, direction);
         }
 
         if (!(state.getBlock() instanceof PneumaticConnectionBlock)) {

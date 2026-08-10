@@ -85,7 +85,7 @@ public class PneumaticConnectionBlockEntity extends SmartBlockEntity {
             return;
         }
 
-        if (!firstTube.acceptItem(extracted, path)) {
+        if (!firstTube.acceptItem(extracted, path, worldPosition)) {
             insertItem(source.handler(), extracted);
             return;
         }
@@ -108,7 +108,8 @@ public class PneumaticConnectionBlockEntity extends SmartBlockEntity {
     }
 
     public ItemStack insertIntoAttachedInventory(Level level, ItemStack stack) {
-        if (getBlockState().getValue(PneumaticConnectionBlock.MODE) != PneumaticConnectionBlock.ConnectionMode.INSERT) {
+        if (getBlockState().getValue(PneumaticConnectionBlock.MODE)
+                != PneumaticConnectionBlock.ConnectionMode.INSERT) {
             return stack;
         }
 

@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " R ",
+    "RPR",
+    " R "
+  ],
+  "key": {
+    "R": {
+      "item": "minecraft:redstone"
+    },
+    "P": {
+      "item": "overpressure:pneumatic_tube"
+    }
+  },
+  "result": {
+    "id": "overpressure:clog_sensor"
+  }
+}

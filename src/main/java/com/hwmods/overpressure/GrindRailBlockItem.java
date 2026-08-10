@@ -25,6 +25,7 @@ import net.minecraft.world.phys.Vec3;
 
 public class GrindRailBlockItem extends BlockItem {
     private static final double MAX_DIRECT_DISTANCE = 64.0;
+    private static final double HORIZONTAL_EPSILON = 1.0E-4;
     private static final int SAMPLES_PER_BLOCK = 16;
     private static final Map<UUID, RailAnchor> SERVER_STARTS = new HashMap<>();
     private static final Map<UUID, RailAnchor> CLIENT_STARTS = new HashMap<>();
@@ -47,8 +48,13 @@ public class GrindRailBlockItem extends BlockItem {
             return context.getLevel().isClientSide ? InteractionResult.SUCCESS : InteractionResult.CONSUME;
         }
 
-        RailAnchor target = getAnchor(context.getLevel(), context.getClickedPos(), context.getClickedFace(),
-                context.getClickLocation());
+        RailAnchor target = getAnchor(
+                context.getLevel(),
+                context.getClickedPos(),
+                context.getClickedFace(),
+                context.getClickLocation(),
+                player.getDirection()
+        );
         RailAnchor start = starts.get(playerId);
         if (start == null) {
             starts.put(playerId, target);
@@ -119,11 +125,24 @@ public class GrindRailBlockItem extends BlockItem {
         return true;
     }
 
-    public RailPlan createClientPlan(Level level, RailAnchor start, BlockPos pos, Direction face, Vec3 hitLocation) {
-        return createPlan(level, start, getAnchor(level, pos, face, hitLocation));
+    public RailPlan createClientPlan(
+            Level level,
+            RailAnchor start,
+            BlockPos pos,
+            Direction face,
+            Vec3 hitLocation,
+            Direction horizontalDirection
+    ) {
+        return createPlan(level, start, getAnchor(level, pos, face, hitLocation, horizontalDirection));
     }
 
     public static RailPlan createPlan(Level level, RailAnchor start, RailAnchor end) {
+        if (Math.abs(start.point.y - end.point.y) > HORIZONTAL_EPSILON
+                || Math.abs(start.tangent.y) > HORIZONTAL_EPSILON
+                || Math.abs(end.tangent.y) > HORIZONTAL_EPSILON) {
+            return RailPlan.invalid("overpressure.grind_rail.error.horizontal");
+        }
+
         double distance = start.point.distanceTo(end.point);
         if (distance < 0.75) {
             return RailPlan.invalid("overpressure.grind_rail.error.short");
@@ -193,20 +212,37 @@ public class GrindRailBlockItem extends BlockItem {
         return tangent.lengthSqr() < 1.0E-8 ? Vec3.ZERO : tangent.normalize();
     }
 
-    public static RailAnchor getAnchor(Level level, BlockPos pos, Direction face, Vec3 hitLocation) {
+    public static RailAnchor getAnchor(
+            Level level,
+            BlockPos pos,
+            Direction face,
+            Vec3 hitLocation,
+            Direction horizontalDirection
+    ) {
         if (level.getBlockEntity(pos) instanceof GrindRailBlockEntity rail) {
             Vec3 p0 = rail.getWorldP0();
             Vec3 p3 = rail.getWorldP3();
             if (hitLocation.distanceToSqr(p0) <= hitLocation.distanceToSqr(p3)) {
                 Vec3 tangent = p0.subtract(rail.getWorldP1()).normalize();
-                return new RailAnchor(p0, tangent);
+                return new RailAnchor(p0, horizontalTangent(tangent, horizontalDirection));
             }
             Vec3 tangent = p3.subtract(rail.getWorldP2()).normalize();
-            return new RailAnchor(p3, tangent);
+            return new RailAnchor(p3, horizontalTangent(tangent, horizontalDirection));
         }
 
         Vec3 point = Vec3.atCenterOf(pos.relative(face));
-        return new RailAnchor(point, Vec3.atLowerCornerOf(face.getNormal()));
+        Vec3 tangent = face.getAxis().isHorizontal()
+                ? Vec3.atLowerCornerOf(face.getNormal())
+                : Vec3.atLowerCornerOf(horizontalDirection.getNormal());
+        return new RailAnchor(point, horizontalTangent(tangent, horizontalDirection));
+    }
+
+    private static Vec3 horizontalTangent(Vec3 tangent, Direction fallbackDirection) {
+        Vec3 horizontal = new Vec3(tangent.x, 0.0, tangent.z);
+        if (horizontal.lengthSqr() < 1.0E-8) {
+            horizontal = Vec3.atLowerCornerOf(fallbackDirection.getNormal());
+        }
+        return horizontal.normalize();
     }
 
     @Nullable

@@ -1,12 +1,14 @@
 package com.hwmods.overpressure;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.WeakHashMap;
 
 import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
 import com.simibubi.create.content.decoration.bracket.BracketedBlockEntityBehaviour;
@@ -37,28 +39,46 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
     public static final int MIN_PUMPED_MOVE_TIME = 4;
     private static final int SPEED_BAR_SEGMENTS = 18;
     private static final int SPEED_CHECK_INTERVAL = 2;
-    private static final Map<Long, ClientMotion> CLIENT_MOTIONS = new HashMap<>();
+    private static final float CLIENT_MAX_OWNER_LEAD = 2.0f;
+    private static final long CLIENT_MOTION_TTL = 200L;
+    private static final Map<Level, Map<Long, ClientMotion>> CLIENT_MOTIONS = new WeakHashMap<>();
+    private static final Map<Level, Long> CLIENT_LAST_CLEANUP = new WeakHashMap<>();
+    private static final Map<Level, Long> TRANSPORT_TOPOLOGY_VERSIONS = new WeakHashMap<>();
     private MovingTubeItem movingItem;
 
+    public record ClientRenderStep(int pathIndex, int nextOwnerPathIndex, float progress) {
+    }
+
     private static class ClientMotion {
-        private int pathIndex;
-        private boolean waitingForNextTube;
-        private boolean waitingAtDestination;
-        private float progress;
+        private final List<BlockPos> path;
+        private final List<Integer> ownerPathIndexes;
+        private int authoritativeOwnerOrdinal;
+        private BlockPos authoritativeOwner;
+        private float routeProgress;
+        private float routeLimit;
         private float lastRenderTime;
+        private long lastSeenGameTime;
+        private int cachedSegmentDurationPathIndex = -1;
+        private int cachedSegmentDuration;
+        private long lastSegmentDurationCheck = Long.MIN_VALUE;
+        private boolean topologyDirty;
 
-        private ClientMotion(MovingTubeItem item, float renderTime) {
-            pathIndex = item.pathIndex;
-            waitingForNextTube = item.waitingForNextTube;
-            waitingAtDestination = item.waitingAtDestination;
-            progress = item.segmentProgress;
+        private ClientMotion(
+                MovingTubeItem item,
+                List<Integer> ownerPathIndexes,
+                int ownerOrdinal,
+                BlockPos owner,
+                float renderTime,
+                long gameTime
+        ) {
+            path = List.copyOf(item.path);
+            this.ownerPathIndexes = List.copyOf(ownerPathIndexes);
+            authoritativeOwnerOrdinal = ownerOrdinal;
+            authoritativeOwner = owner.immutable();
+            routeProgress = ownerOrdinal + item.segmentProgress;
+            routeLimit = ownerPathIndexes.size();
             lastRenderTime = renderTime;
-        }
-
-        private boolean matches(MovingTubeItem item) {
-            return pathIndex == item.pathIndex
-                    && waitingForNextTube == item.waitingForNextTube
-                    && waitingAtDestination == item.waitingAtDestination;
+            lastSeenGameTime = gameTime;
         }
     }
 
@@ -74,6 +94,16 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
     public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
         behaviours.add(new BracketedBlockEntityBehaviour(this, state -> state.getBlock() instanceof PneumaticTubeBlock
                 && !(state.getBlock() instanceof CurvaturePneumaticTubeBlock)));
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    public void setBlockState(BlockState blockState) {
+        BlockState previousState = getBlockState();
+        super.setBlockState(blockState);
+        if (level != null && level.isClientSide && !previousState.equals(blockState)) {
+            invalidateClientPathAt(level, worldPosition);
+        }
     }
 
     @Override
@@ -129,22 +159,34 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         if (tube.movingItem != null) {
             tube.tickMovingItem(level);
         }
+        tube.afterTransportTick(level);
+    }
+
+    protected void afterTransportTick(Level level) {
     }
 
     public boolean acceptItem(ItemStack stack, TubePath path) {
+        return acceptItem(stack, path, null);
+    }
+
+    public boolean acceptItem(ItemStack stack, TubePath path, BlockPos sourceConnector) {
         if (!canAcceptItem(stack, path)) {
             return false;
         }
 
         int pathIndex = path.tubePositions().indexOf(worldPosition);
-        List<BlockPos> speedControllers = findSpeedControllers(path.tubePositions());
+        List<MovingTubeItem.SpeedController> speedControllers = findSpeedControllers(path.tubePositions());
 
         movingItem = new MovingTubeItem(stack, path.tubePositions(), path.targetConnector());
+        movingItem.sourceConnector = sourceConnector == null ? null : sourceConnector.immutable();
         movingItem.spillsAtEnd = path.spillsAtEnd();
+        movingItem.startPathIndex = pathIndex;
         movingItem.pathIndex = pathIndex;
-        movingItem.moveTime = calculateMoveTime(path);
         movingItem.speedControllers = speedControllers;
+        movingItem.moveTime = calculateMoveTime(speedControllers);
+        movingItem.segmentDuration = calculateSegmentDuration(movingItem, pathIndex);
         movingItem.hasSpeedControllerCache = true;
+        movingItem.transportTopologyVersion = getTransportTopologyVersion(level);
         movingItem.animationId = createAnimationId(level);
         movingItem.startedAtGameTime = level.getGameTime();
         movingItem.lastTickedGameTime = level.getGameTime();
@@ -165,7 +207,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
             return false;
         }
 
-        List<BlockPos> speedControllers = findSpeedControllers(path.tubePositions());
+        List<MovingTubeItem.SpeedController> speedControllers = findSpeedControllers(path.tubePositions());
         if (!hasRunningPump(speedControllers)) {
             return false;
         }
@@ -238,7 +280,11 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         }
 
         if (movingItem.waitingForNextTube) {
-            tryRerouteBlockedDeviderOutput(level);
+            tryRerouteDeviderOutput(level);
+
+            if (!hasRunningPump(movingItem)) {
+                return;
+            }
 
             if (!canMoveToNextPathNode(level)) {
                 return;
@@ -249,18 +295,23 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
             return;
         }
 
-        if (!hasRunningPump(movingItem.speedControllers)) {
+        if (!hasRunningPump(movingItem)) {
+            return;
+        }
+
+        int segmentDuration = getCurrentSegmentDuration();
+        if (segmentDuration <= 0) {
             return;
         }
 
         if (isApproachingFallbackEnd()
-                && movingItem.segmentProgress + 1.0f / getCurrentMoveTime() >= 0.5f) {
+                && movingItem.segmentProgress + 1.0f / segmentDuration >= 0.5f) {
             tryInsertIntoTargetConnector(level);
             return;
         }
 
         if (isApproachingBrokenSegment(level)
-                && movingItem.segmentProgress + 1.0f / getCurrentMoveTime() >= 0.5f) {
+                && movingItem.segmentProgress + 1.0f / segmentDuration >= 0.5f) {
             BlockPos brokenSegment = movingItem.path.get(movingItem.pathIndex + 1);
             movingItem.targetConnector = brokenSegment;
             movingItem.spillsAtEnd = true;
@@ -272,9 +323,8 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
             return;
         }
 
-        movingItem.moveTime = getCurrentMoveTime();
-        movingItem.segmentProgress = Math.min(1.0f, movingItem.segmentProgress + 1.0f / movingItem.moveTime);
-        movingItem.progress = Math.round(movingItem.segmentProgress * movingItem.moveTime);
+        movingItem.segmentProgress = Math.min(1.0f, movingItem.segmentProgress + 1.0f / segmentDuration);
+        movingItem.progress = Math.round(movingItem.segmentProgress * segmentDuration);
 
         if (movingItem.segmentProgress < 1.0f) {
             setChanged();
@@ -284,7 +334,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         moveToNextPathNode(level);
     }
 
-    private boolean tryRerouteBlockedDeviderOutput(Level level) {
+    private boolean tryRerouteDeviderOutput(Level level) {
         if (!(this instanceof DeviderBlockEntity devider)) {
             return false;
         }
@@ -294,16 +344,20 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
             return false;
         }
 
-        BlockPos blockedOutput = movingItem.path.get(nextPathIndex);
-        if (!devider.isOutputPosition(blockedOutput)
-                || (devider.isOutputEnabled(blockedOutput)
-                && (!(level.getBlockEntity(blockedOutput) instanceof PneumaticTubeBlockEntity blockedTube)
-                || blockedTube.movingItem == null))) {
-            return false;
+        BlockPos previousPos = movingItem.pathIndex > 0
+                ? movingItem.path.get(movingItem.pathIndex - 1)
+                : null;
+        List<BlockPos> enabledOutputs = devider.getForwardPositions(previousPos);
+        BlockPos currentOutput = movingItem.path.get(nextPathIndex);
+        if (enabledOutputs.contains(currentOutput)
+                && level.getBlockEntity(currentOutput) instanceof PneumaticTubeBlockEntity currentTube) {
+            if (currentTube.movingItem == null || !isOutputBranchSaturated(level, currentTube)) {
+                return false;
+            }
         }
 
-        for (BlockPos alternateOutput : devider.getOrderedOutputPositions()) {
-            if (alternateOutput.equals(blockedOutput)) {
+        for (BlockPos alternateOutput : enabledOutputs) {
+            if (alternateOutput.equals(currentOutput)) {
                 continue;
             }
 
@@ -325,16 +379,56 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
             movingItem.spillsAtEnd = alternatePath.spillsAtEnd();
             movingItem.speedControllers = findSpeedControllers(reroutedPath);
             movingItem.hasSpeedControllerCache = true;
+            movingItem.transportTopologyVersion = getTransportTopologyVersion(level);
             movingItem.lastSpeedCheckGameTime = Long.MIN_VALUE;
+            movingItem.segmentDuration = calculateSegmentDuration(movingItem, movingItem.pathIndex);
             movingItem.waitingForNextTube = false;
             movingItem.waitingAtDestination = false;
-            devider.markOutputUsed(alternateOutput);
             setChanged();
             syncMovingItem(level);
             return true;
         }
 
         return false;
+    }
+
+    static boolean isOutputBranchSaturated(Level level, PneumaticTubeBlockEntity firstTube) {
+        Set<BlockPos> visited = new HashSet<>();
+        PneumaticTubeBlockEntity tube = firstTube;
+
+        while (visited.add(tube.worldPosition)) {
+            MovingTubeItem queuedItem = tube.movingItem;
+            if (queuedItem == null) {
+                return false;
+            }
+            if (queuedItem.waitingAtDestination) {
+                return true;
+            }
+            if (!queuedItem.waitingForNextTube) {
+                return false;
+            }
+
+            int nextIndex = queuedItem.pathIndex + 1;
+            if (nextIndex >= queuedItem.path.size()) {
+                return true;
+            }
+
+            BlockEntity nextEntity = level.getBlockEntity(queuedItem.path.get(nextIndex));
+            if (nextEntity instanceof ItemPumpBlockEntity) {
+                nextIndex++;
+                if (nextIndex >= queuedItem.path.size()) {
+                    return true;
+                }
+                nextEntity = level.getBlockEntity(queuedItem.path.get(nextIndex));
+            }
+
+            if (!(nextEntity instanceof PneumaticTubeBlockEntity nextTube)) {
+                return true;
+            }
+            tube = nextTube;
+        }
+
+        return true;
     }
 
     private void moveToNextPathNode(Level level) {
@@ -361,6 +455,9 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         BlockEntity nextBlockEntity = level.getBlockEntity(nextPos);
 
         if (nextBlockEntity instanceof PneumaticTubeBlockEntity nextTube && nextTube.movingItem == null) {
+            if (nextTube instanceof DeviderBlockEntity devider && devider.isBranchPosition(worldPosition)) {
+                devider.markMergeInputUsed(worldPosition);
+            }
             transferToTube(level, nextTube);
         } else if (nextBlockEntity instanceof PneumaticTubeBlockEntity) {
             movingItem.pathIndex = previousPathIndex;
@@ -378,6 +475,9 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
             BlockEntity afterPumpBlockEntity = level.getBlockEntity(movingItem.path.get(movingItem.pathIndex));
 
             if (afterPumpBlockEntity instanceof PneumaticTubeBlockEntity afterPumpTube && afterPumpTube.movingItem == null) {
+                if (afterPumpTube instanceof DeviderBlockEntity devider && devider.isBranchPosition(nextPos)) {
+                    devider.markMergeInputUsed(nextPos);
+                }
                 transferToTube(level, afterPumpTube);
             } else if (!isPathNode(level, movingItem.path.get(movingItem.pathIndex))) {
                 ejectMovingItem(level, Vec3.atCenterOf(nextPos));
@@ -397,6 +497,12 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         nextTube.movingItem = movingItem;
         nextTube.movingItem.progress = 0;
         nextTube.movingItem.segmentProgress = 0.0f;
+        nextTube.movingItem.moveTime = nextTube.calculateMoveTime(nextTube.movingItem.speedControllers);
+        nextTube.movingItem.segmentDuration = nextTube.calculateSegmentDuration(
+                nextTube.movingItem,
+                nextTube.movingItem.pathIndex
+        );
+        nextTube.movingItem.lastSpeedCheckGameTime = Long.MIN_VALUE;
         nextTube.movingItem.startedAtGameTime = level.getGameTime();
         nextTube.movingItem.waitingForNextTube = false;
         nextTube.movingItem.waitingAtDestination = false;
@@ -542,11 +648,14 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         movingItem.spillsAtEnd = extension.spillsAtEnd();
         movingItem.speedControllers = findSpeedControllers(restoredPath);
         movingItem.hasSpeedControllerCache = true;
+        movingItem.transportTopologyVersion = getTransportTopologyVersion(level);
         movingItem.lastSpeedCheckGameTime = Long.MIN_VALUE;
         movingItem.waitingAtDestination = false;
         movingItem.waitingForNextTube = false;
         movingItem.progress = 0;
         movingItem.segmentProgress = 0.0f;
+        movingItem.segmentDuration = calculateSegmentDuration(movingItem, movingItem.pathIndex);
+        movingItem.startedAtGameTime = level.getGameTime();
         TubeNetworkPathfinder.commitDeviderChoices(level, extension);
         setChanged();
         syncMovingItem(level);
@@ -585,6 +694,17 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
 
         BlockPos currentPos = movingItem.path.get(currentPathIndex);
         BlockPos nextPos = movingItem.path.get(nextPathIndex);
+        if (level.getBlockEntity(currentPos) instanceof DeviderBlockEntity devider
+                && currentPathIndex > 0
+                && devider.isBranchPosition(movingItem.path.get(currentPathIndex - 1))
+                && !devider.isBranchPositionEnabled(movingItem.path.get(currentPathIndex - 1))) {
+            return false;
+        }
+        if (level.getBlockEntity(nextPos) instanceof DeviderBlockEntity devider
+                && devider.isBranchPosition(currentPos)
+                && !devider.canMergeFrom(level, currentPos)) {
+            return false;
+        }
         if (!canMoveBetween(currentPos, nextPos)) {
             return false;
         }
@@ -594,6 +714,11 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         }
 
         BlockPos afterPumpPos = movingItem.path.get(nextPathIndex);
+        if (level.getBlockEntity(afterPumpPos) instanceof DeviderBlockEntity devider
+                && devider.isBranchPosition(nextPos)
+                && !devider.canMergeFrom(level, nextPos)) {
+            return false;
+        }
         return canMoveBetween(nextPos, afterPumpPos);
     }
 
@@ -606,72 +731,332 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
     }
 
     public boolean shouldRenderMovingItem(float partialTick) {
-        MovingTubeItem item = getRenderMovingItem();
-
-        if (item == null) {
-            return false;
-        }
-
-        return item.pathIndex >= 0
-                && item.pathIndex < item.path.size()
-                && item.path.get(item.pathIndex).equals(worldPosition);
+        return getClientRenderStep(partialTick) != null;
     }
 
     public float getMovingProgress(float partialTick) {
-        MovingTubeItem item = getRenderMovingItem();
-
-        if (item == null) {
-            return 0.0f;
-        }
-
-        if (level != null && level.isClientSide) {
-            return getClientMovingProgress(item, partialTick);
-        }
-
-        return item.segmentProgress;
+        ClientRenderStep step = getClientRenderStep(partialTick);
+        return step == null ? 0.0f : step.progress();
     }
 
-    private float getClientMovingProgress(MovingTubeItem item, float partialTick) {
-        if (item.waitingForNextTube || item.waitingAtDestination || !hasRunningPump(item.speedControllers)) {
-            return item.segmentProgress;
+    public ClientRenderStep getClientRenderStep(float partialTick) {
+        MovingTubeItem item = getRenderMovingItem();
+        if (item == null
+                || item.pathIndex < 0
+                || item.pathIndex >= item.path.size()
+                || !item.path.get(item.pathIndex).equals(worldPosition)) {
+            return null;
         }
 
-        float renderTime = getClientGameTime() + partialTick;
-        ClientMotion motion = CLIENT_MOTIONS.get(item.animationId);
+        if (level == null || !level.isClientSide) {
+            int nextOwnerPathIndex = findNextOwnerPathIndex(item.path, item.pathIndex);
+            return new ClientRenderStep(
+                    item.pathIndex,
+                    nextOwnerPathIndex,
+                    getRenderSegmentProgress(item, item.pathIndex, nextOwnerPathIndex, item.segmentProgress)
+            );
+        }
 
-        if (motion == null || !motion.matches(item)) {
-            motion = new ClientMotion(item, renderTime);
-            CLIENT_MOTIONS.put(item.animationId, motion);
-            return motion.progress;
+        ensureSpeedControllers(item);
+        float renderTime = getClientGameTime() + partialTick;
+        long gameTime = level.getGameTime();
+        Map<Long, ClientMotion> motions = CLIENT_MOTIONS.computeIfAbsent(level, ignored -> new HashMap<>());
+        cleanupClientMotions(level, motions, gameTime);
+
+        ClientMotion motion = motions.get(item.animationId);
+        if (motion == null || !motion.path.equals(item.path)) {
+            motion = createClientMotion(item, renderTime, gameTime);
+            if (motion == null) {
+                return null;
+            }
+            motions.put(item.animationId, motion);
+        }
+
+        int ownerOrdinal = motion.ownerPathIndexes.indexOf(item.pathIndex);
+        if (ownerOrdinal < 0) {
+            motions.remove(item.animationId);
+            return null;
+        }
+        if (ownerOrdinal < motion.authoritativeOwnerOrdinal) {
+            return null;
+        }
+
+        if (ownerOrdinal > motion.authoritativeOwnerOrdinal) {
+            motion.authoritativeOwnerOrdinal = ownerOrdinal;
+            motion.authoritativeOwner = worldPosition.immutable();
+        } else if (!motion.authoritativeOwner.equals(worldPosition)) {
+            return null;
+        }
+
+        if (motion.topologyDirty) {
+            refreshClientRouteLimit(motion);
         }
 
         float elapsed = Math.max(0.0f, renderTime - motion.lastRenderTime);
-        motion.progress = Math.min(getClientProgressLimit(item),
-                motion.progress + elapsed / getCurrentMoveTime());
         motion.lastRenderTime = renderTime;
-        return motion.progress;
+        motion.lastSeenGameTime = gameTime;
+
+        float serverProgress = ownerOrdinal + item.segmentProgress;
+        float movementLimit = Math.min(motion.routeLimit, getClientQueueLimit(motion, item));
+        if (item.waitingForNextTube || item.waitingAtDestination) {
+            motion.routeProgress = Math.max(motion.routeProgress, serverProgress);
+        } else {
+            motion.routeProgress = Math.max(motion.routeProgress, serverProgress);
+            advanceClientRoute(motion, item, elapsed, movementLimit);
+        }
+
+        float authorityFloor = ownerOrdinal + item.segmentProgress;
+        float leadLimit = Math.min(
+                motion.ownerPathIndexes.size(),
+                ownerOrdinal + CLIENT_MAX_OWNER_LEAD
+        );
+        motion.routeProgress = Math.max(authorityFloor, Math.min(motion.routeProgress, leadLimit));
+        return toClientRenderStep(motion, item);
     }
 
-    private float getClientProgressLimit(MovingTubeItem item) {
-        if (item.spillsAtEnd && item.pathIndex + 1 >= item.path.size()) {
-            return 0.5f;
+    private ClientMotion createClientMotion(MovingTubeItem item, float renderTime, long gameTime) {
+        List<Integer> ownerPathIndexes = findOwnerPathIndexes(item.path);
+        int ownerOrdinal = ownerPathIndexes.indexOf(item.pathIndex);
+        if (ownerOrdinal < 0) {
+            return null;
         }
 
-        if (level != null && item.pathIndex + 1 < item.path.size()
-                && !isPathNode(level, item.path.get(item.pathIndex + 1))) {
-            return 0.5f;
+        ClientMotion motion = new ClientMotion(
+                item,
+                ownerPathIndexes,
+                ownerOrdinal,
+                worldPosition,
+                renderTime,
+                gameTime
+        );
+
+        if (!item.waitingForNextTube && !item.waitingAtDestination) {
+            int segmentDuration = getClientSegmentDuration(motion, item, item.pathIndex);
+            if (segmentDuration > 0) {
+                float elapsedSinceStart = Math.max(0.0f, renderTime - item.startedAtGameTime);
+                motion.routeProgress = Math.max(
+                        motion.routeProgress,
+                        ownerOrdinal + elapsedSinceStart / segmentDuration
+                );
+            }
+        }
+        return motion;
+    }
+
+    private List<Integer> findOwnerPathIndexes(List<BlockPos> path) {
+        List<Integer> ownerPathIndexes = new ArrayList<>();
+        for (int pathIndex = 0; pathIndex < path.size(); pathIndex++) {
+            if (!(level.getBlockState(path.get(pathIndex)).getBlock() instanceof ItemPumpBlock)) {
+                ownerPathIndexes.add(pathIndex);
+            }
+        }
+        return ownerPathIndexes;
+    }
+
+    private int findNextOwnerPathIndex(List<BlockPos> path, int currentPathIndex) {
+        for (int pathIndex = currentPathIndex + 1; pathIndex < path.size(); pathIndex++) {
+            if (level == null || !(level.getBlockState(path.get(pathIndex)).getBlock() instanceof ItemPumpBlock)) {
+                return pathIndex;
+            }
+        }
+        return -1;
+    }
+
+    private void advanceClientRoute(
+            ClientMotion motion,
+            MovingTubeItem item,
+            float elapsedTicks,
+            float movementLimit
+    ) {
+        float maxProgress = Math.min(
+                motion.ownerPathIndexes.size(),
+                Math.min(movementLimit, motion.authoritativeOwnerOrdinal + CLIENT_MAX_OWNER_LEAD)
+        );
+
+        while (elapsedTicks > 0.0f && motion.routeProgress < maxProgress) {
+            int ownerOrdinal = Math.min(
+                    (int) Math.floor(motion.routeProgress),
+                    motion.ownerPathIndexes.size() - 1
+            );
+            int pathIndex = motion.ownerPathIndexes.get(ownerOrdinal);
+            int segmentDuration = getClientSegmentDuration(motion, item, pathIndex);
+            if (segmentDuration <= 0) {
+                return;
+            }
+
+            float segmentEnd = Math.min(ownerOrdinal + 1.0f, maxProgress);
+            float ticksToSegmentEnd = (segmentEnd - motion.routeProgress) * segmentDuration;
+            if (elapsedTicks < ticksToSegmentEnd) {
+                motion.routeProgress += elapsedTicks / segmentDuration;
+                return;
+            }
+
+            motion.routeProgress = segmentEnd;
+            elapsedTicks -= ticksToSegmentEnd;
+        }
+    }
+
+    private float getClientQueueLimit(ClientMotion motion, MovingTubeItem item) {
+        int nextOwnerOrdinal = motion.authoritativeOwnerOrdinal + 1;
+        if (nextOwnerOrdinal >= motion.ownerPathIndexes.size()) {
+            return motion.ownerPathIndexes.size();
         }
 
-        return 1.0f;
+        int nextOwnerPathIndex = motion.ownerPathIndexes.get(nextOwnerOrdinal);
+        BlockEntity nextOwner = level.getBlockEntity(item.path.get(nextOwnerPathIndex));
+        if (!(nextOwner instanceof PneumaticTubeBlockEntity nextTube)) {
+            return motion.routeLimit;
+        }
+
+        MovingTubeItem nextItem = nextTube.getMovingItem();
+        if (nextItem == null || nextItem.animationId == item.animationId) {
+            return motion.ownerPathIndexes.size();
+        }
+
+        return motion.authoritativeOwnerOrdinal + 1.0f;
+    }
+
+    private int getClientSegmentDuration(ClientMotion motion, MovingTubeItem item, int pathIndex) {
+        int authoritativePathIndex = motion.ownerPathIndexes.get(motion.authoritativeOwnerOrdinal);
+        if (pathIndex == authoritativePathIndex) {
+            return item.segmentDuration;
+        }
+
+        long gameTime = level.getGameTime();
+        if (motion.cachedSegmentDurationPathIndex == pathIndex
+                && motion.lastSegmentDurationCheck != Long.MIN_VALUE
+                && gameTime - motion.lastSegmentDurationCheck < SPEED_CHECK_INTERVAL) {
+            return motion.cachedSegmentDuration;
+        }
+
+        ensureSpeedControllers(item);
+        motion.cachedSegmentDuration = calculateSegmentDuration(item, pathIndex);
+        if (motion.cachedSegmentDuration <= 0 && item.segmentDuration > 0) {
+            motion.cachedSegmentDuration = item.segmentDuration;
+        }
+        motion.cachedSegmentDurationPathIndex = pathIndex;
+        motion.lastSegmentDurationCheck = gameTime;
+        return motion.cachedSegmentDuration;
+    }
+
+    private ClientRenderStep toClientRenderStep(ClientMotion motion, MovingTubeItem item) {
+        int ownerCount = motion.ownerPathIndexes.size();
+        if (ownerCount == 0) {
+            return null;
+        }
+
+        int ownerOrdinal = (int) Math.floor(motion.routeProgress);
+        float progress;
+        if (ownerOrdinal >= ownerCount) {
+            ownerOrdinal = ownerCount - 1;
+            progress = 1.0f;
+        } else {
+            progress = motion.routeProgress - ownerOrdinal;
+        }
+
+        int pathIndex = motion.ownerPathIndexes.get(ownerOrdinal);
+        int nextOwnerPathIndex = ownerOrdinal + 1 < ownerCount
+                ? motion.ownerPathIndexes.get(ownerOrdinal + 1)
+                : -1;
+        return new ClientRenderStep(
+                pathIndex,
+                nextOwnerPathIndex,
+                getRenderSegmentProgress(item, pathIndex, nextOwnerPathIndex, progress)
+        );
+    }
+
+    private void refreshClientRouteLimit(ClientMotion motion) {
+        motion.routeLimit = motion.ownerPathIndexes.size();
+        motion.cachedSegmentDurationPathIndex = -1;
+        motion.lastSegmentDurationCheck = Long.MIN_VALUE;
+
+        for (int pathIndex = 0; pathIndex + 1 < motion.path.size(); pathIndex++) {
+            if (PneumaticLine.isTravelAllowed(level, motion.path.get(pathIndex), motion.path.get(pathIndex + 1))) {
+                continue;
+            }
+
+            int ownerOrdinal = findOwnerOrdinalAtOrBefore(motion.ownerPathIndexes, pathIndex);
+            if (ownerOrdinal >= 0) {
+                BlockEntity owner = level.getBlockEntity(motion.path.get(
+                        motion.ownerPathIndexes.get(ownerOrdinal)
+                ));
+                float boundary = owner instanceof CurvaturePneumaticTubeEntity
+                        || owner instanceof DeviderBlockEntity ? 1.0f : 0.42f;
+                motion.routeLimit = ownerOrdinal + boundary;
+            }
+            break;
+        }
+        motion.topologyDirty = false;
+    }
+
+    private static int findOwnerOrdinalAtOrBefore(List<Integer> ownerPathIndexes, int pathIndex) {
+        for (int ownerOrdinal = ownerPathIndexes.size() - 1; ownerOrdinal >= 0; ownerOrdinal--) {
+            if (ownerPathIndexes.get(ownerOrdinal) <= pathIndex) {
+                return ownerOrdinal;
+            }
+        }
+        return -1;
+    }
+
+    public static void invalidateClientPathAt(Level level, BlockPos pos) {
+        if (level == null || !level.isClientSide) {
+            return;
+        }
+
+        Map<Long, ClientMotion> motions = CLIENT_MOTIONS.get(level);
+        if (motions == null) {
+            return;
+        }
+
+        for (ClientMotion motion : motions.values()) {
+            if (motion.path.contains(pos)) {
+                motion.topologyDirty = true;
+            }
+        }
+    }
+
+    public static void invalidateTransportTopologyAt(Level level, BlockPos pos) {
+        if (level == null) {
+            return;
+        }
+        if (level.isClientSide) {
+            invalidateClientPathAt(level, pos);
+            return;
+        }
+
+        long currentVersion = TRANSPORT_TOPOLOGY_VERSIONS.getOrDefault(level, 0L);
+        TRANSPORT_TOPOLOGY_VERSIONS.put(level, currentVersion == Long.MAX_VALUE ? 0L : currentVersion + 1L);
+    }
+
+    private static long getTransportTopologyVersion(Level level) {
+        return level == null || level.isClientSide
+                ? 0L
+                : TRANSPORT_TOPOLOGY_VERSIONS.getOrDefault(level, 0L);
+    }
+
+    private static void cleanupClientMotions(Level level, Map<Long, ClientMotion> motions, long gameTime) {
+        long lastCleanup = CLIENT_LAST_CLEANUP.getOrDefault(level, Long.MIN_VALUE);
+        if (lastCleanup != Long.MIN_VALUE && gameTime - lastCleanup < CLIENT_MOTION_TTL / 2) {
+            return;
+        }
+
+        motions.values().removeIf(motion -> gameTime - motion.lastSeenGameTime > CLIENT_MOTION_TTL);
+        CLIENT_LAST_CLEANUP.put(level, gameTime);
     }
 
     private float getClientGameTime() {
         return level == null ? 0.0f : level.getGameTime();
     }
-
     private int getCurrentMoveTime() {
         if (movingItem == null || level == null) {
             return BASE_MOVE_TIME;
+        }
+
+        ensureSpeedControllers(movingItem);
+        if (movingItem.speedControllers.isEmpty()) {
+            movingItem.moveTime = 0;
+            movingItem.segmentDuration = 0;
+            return 0;
         }
 
         long gameTime = level.getGameTime();
@@ -680,21 +1065,22 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
             return movingItem.moveTime;
         }
 
-        if (!movingItem.hasSpeedControllerCache) {
-            movingItem.speedControllers = findSpeedControllers(movingItem.path);
-            movingItem.hasSpeedControllerCache = true;
-        }
-
-        int moveTime = 0;
-        for (BlockPos controllerPos : movingItem.speedControllers) {
-            if (level.getBlockEntity(controllerPos) instanceof ItemPumpBlockEntity pump && pump.isRunning()) {
-                moveTime = moveTime == 0 ? pump.getMoveTime() : Math.min(moveTime, pump.getMoveTime());
-            }
-        }
-
-        movingItem.moveTime = moveTime;
+        movingItem.moveTime = calculateMoveTime(movingItem.speedControllers);
         movingItem.lastSpeedCheckGameTime = gameTime;
-        return moveTime;
+        return movingItem.moveTime;
+    }
+
+    private int getCurrentSegmentDuration() {
+        int moveTime = getCurrentMoveTime();
+        if (movingItem == null || moveTime <= 0) {
+            if (movingItem != null) {
+                movingItem.segmentDuration = 0;
+            }
+            return 0;
+        }
+
+        movingItem.segmentDuration = calculateSegmentDuration(movingItem, movingItem.pathIndex);
+        return movingItem.segmentDuration;
     }
 
     private long createAnimationId(Level level) {
@@ -732,7 +1118,11 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         }
 
         movingItem.path = offsetPositions(movingItem.path, offset);
-        movingItem.speedControllers = offsetPositions(movingItem.speedControllers, offset);
+        movingItem.speedControllers = List.of();
+        movingItem.hasSpeedControllerCache = false;
+        if (movingItem.sourceConnector != null) {
+            movingItem.sourceConnector = movingItem.sourceConnector.offset(offset);
+        }
         movingItem.targetConnector = movingItem.targetConnector.offset(offset);
     }
 
@@ -752,23 +1142,21 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
 
         CompoundTag movingTag = new CompoundTag();
         movingTag.put("stack", movingItem.stack.save(registries));
+        if (movingItem.sourceConnector != null) {
+            movingTag.put("source", saveBlockPos(movingItem.sourceConnector));
+        }
         movingTag.put("target", saveBlockPos(movingItem.targetConnector));
         movingTag.putBoolean("spills_at_end", movingItem.spillsAtEnd);
+        movingTag.putInt("start_path_index", movingItem.startPathIndex);
         movingTag.putInt("path_index", movingItem.pathIndex);
         movingTag.putInt("progress", movingItem.progress);
         movingTag.putFloat("segment_progress", movingItem.segmentProgress);
         movingTag.putInt("move_time", movingItem.moveTime);
+        movingTag.putInt("segment_duration", movingItem.segmentDuration);
         movingTag.putLong("animation_id", movingItem.animationId);
         movingTag.putLong("started_at", movingItem.startedAtGameTime);
         movingTag.putBoolean("waiting_for_next", movingItem.waitingForNextTube);
         movingTag.putBoolean("waiting_at_destination", movingItem.waitingAtDestination);
-        movingTag.putBoolean("speed_controller_cache", movingItem.hasSpeedControllerCache);
-
-        ListTag controllersTag = new ListTag();
-        for (BlockPos controllerPos : movingItem.speedControllers) {
-            controllersTag.add(saveBlockPos(controllerPos));
-        }
-        movingTag.put("speed_controllers", controllersTag);
 
         ListTag pathTag = new ListTag();
 
@@ -804,74 +1192,280 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         }
 
         MovingTubeItem item = new MovingTubeItem(stack, path, loadBlockPos(movingTag.getCompound("target")));
+        item.sourceConnector = movingTag.contains("source", Tag.TAG_COMPOUND)
+                ? loadBlockPos(movingTag.getCompound("source"))
+                : null;
         item.spillsAtEnd = movingTag.getBoolean("spills_at_end");
+        item.startPathIndex = movingTag.contains("start_path_index", Tag.TAG_INT)
+                ? movingTag.getInt("start_path_index")
+                : 0;
         item.pathIndex = movingTag.getInt("path_index");
         item.progress = movingTag.getInt("progress");
         item.moveTime = movingTag.contains("move_time", Tag.TAG_INT)
-                ? Math.max(1, movingTag.getInt("move_time"))
+                ? Math.max(0, movingTag.getInt("move_time"))
                 : BASE_MOVE_TIME;
+        item.segmentDuration = movingTag.contains("segment_duration", Tag.TAG_INT)
+                ? Math.max(0, movingTag.getInt("segment_duration"))
+                : item.moveTime;
         item.segmentProgress = movingTag.contains("segment_progress", Tag.TAG_FLOAT)
                 ? movingTag.getFloat("segment_progress")
-                : Math.min(1.0f, item.progress / (float) item.moveTime);
+                : Math.min(1.0f, item.progress / (float) Math.max(1, item.segmentDuration));
         item.animationId = movingTag.getLong("animation_id");
         item.startedAtGameTime = movingTag.getLong("started_at");
         item.waitingForNextTube = movingTag.getBoolean("waiting_for_next");
         item.waitingAtDestination = movingTag.getBoolean("waiting_at_destination");
-        item.hasSpeedControllerCache = movingTag.getBoolean("speed_controller_cache");
-
-        ListTag controllersTag = movingTag.getList("speed_controllers", Tag.TAG_COMPOUND);
-        java.util.List<BlockPos> controllers = new java.util.ArrayList<>();
-        for (int i = 0; i < controllersTag.size(); i++) {
-            controllers.add(loadBlockPos(controllersTag.getCompound(i)));
-        }
-        item.speedControllers = controllers;
+        item.hasSpeedControllerCache = false;
         return item;
     }
 
-    private int calculateMoveTime(TubePath path) {
+    private int calculateMoveTime(List<MovingTubeItem.SpeedController> controllers) {
         if (level == null) {
             return BASE_MOVE_TIME;
         }
 
         int moveTime = 0;
-
-        for (BlockPos pathPos : path.tubePositions()) {
-            BlockEntity blockEntity = level.getBlockEntity(pathPos);
-
-            if (blockEntity instanceof ItemPumpBlockEntity pump && pump.isRunning()) {
+        for (MovingTubeItem.SpeedController controller : controllers) {
+            BlockPos controllerPos = controller.pos();
+            if (level.getBlockEntity(controllerPos) instanceof ItemPumpBlockEntity pump && pump.isRunning()) {
                 moveTime = moveTime == 0 ? pump.getMoveTime() : Math.min(moveTime, pump.getMoveTime());
             }
         }
-
         return moveTime;
     }
 
-    private java.util.List<BlockPos> findSpeedControllers(java.util.List<BlockPos> path) {
-        if (level == null) {
-            return java.util.List.of();
+    private int calculateSegmentDuration(MovingTubeItem item, int pathIndex) {
+        if (item == null || pathIndex < 0 || pathIndex >= item.path.size()) {
+            return 0;
         }
 
-        java.util.List<BlockPos> controllers = new java.util.ArrayList<>();
-        for (BlockPos pathPos : path) {
-            if (level.getBlockEntity(pathPos) instanceof ItemPumpBlockEntity) {
-                controllers.add(pathPos.immutable());
+        int fallbackMoveTime = calculateMoveTime(item.speedControllers);
+        if (fallbackMoveTime <= 0) {
+            fallbackMoveTime = item.moveTime;
+        }
+        if (fallbackMoveTime <= 0) {
+            return 0;
+        }
+
+        int duration = 0;
+        if (item.sourceConnector != null && pathIndex == item.startPathIndex) {
+            duration += scaleMoveTime(fallbackMoveTime, getSourceEntryDistance(item));
+            for (int edgeIndex = 0; edgeIndex < pathIndex; edgeIndex++) {
+                duration += getSegmentEdgeDuration(item, edgeIndex, fallbackMoveTime);
             }
         }
-        return controllers;
+
+        BlockEntity owner = level == null ? null : level.getBlockEntity(item.path.get(pathIndex));
+        if (owner instanceof CurvaturePneumaticTubeEntity || owner instanceof DeviderBlockEntity) {
+            return duration + fallbackMoveTime;
+        }
+
+        int nextOwnerPathIndex = findNextOwnerPathIndex(item.path, pathIndex);
+        if (nextOwnerPathIndex <= pathIndex) {
+            return duration + scaleMoveTime(fallbackMoveTime, getTargetEdgeDistance(item, pathIndex));
+        }
+
+        for (int edgeIndex = pathIndex; edgeIndex < nextOwnerPathIndex; edgeIndex++) {
+            duration += getSegmentEdgeDuration(item, edgeIndex, fallbackMoveTime);
+        }
+        return Math.max(1, duration);
     }
 
-    private boolean hasRunningPump(List<BlockPos> controllers) {
-        if (level == null) {
+    private float getRenderSegmentProgress(
+            MovingTubeItem item,
+            int pathIndex,
+            int nextOwnerPathIndex,
+            float temporalProgress
+    ) {
+        float clampedProgress = Math.max(0.0f, Math.min(1.0f, temporalProgress));
+        if (clampedProgress <= 0.0f || clampedProgress >= 1.0f || level == null) {
+            return clampedProgress;
+        }
+
+        BlockEntity owner = level.getBlockEntity(item.path.get(pathIndex));
+        if (owner instanceof CurvaturePneumaticTubeEntity || owner instanceof DeviderBlockEntity) {
+            return clampedProgress;
+        }
+
+        int fallbackMoveTime = calculateMoveTime(item.speedControllers);
+        if (fallbackMoveTime <= 0) {
+            fallbackMoveTime = item.moveTime;
+        }
+        if (fallbackMoveTime <= 0) {
+            return clampedProgress;
+        }
+
+        double totalDistance = getSegmentDistance(item, pathIndex, nextOwnerPathIndex);
+        int totalDuration = calculateSegmentDuration(item, pathIndex);
+        if (totalDistance < 1.0E-6 || totalDuration <= 0) {
+            return clampedProgress;
+        }
+
+        double elapsedTicks = clampedProgress * totalDuration;
+        double traveledDistance = 0.0;
+        int elapsedDuration = 0;
+
+        if (item.sourceConnector != null && pathIndex == item.startPathIndex) {
+            double sourceDistance = getSourceEntryDistance(item);
+            int sourceDuration = scaleMoveTime(fallbackMoveTime, sourceDistance);
+            if (elapsedTicks <= elapsedDuration + sourceDuration) {
+                double localProgress = (elapsedTicks - elapsedDuration) / sourceDuration;
+                return (float) ((traveledDistance + sourceDistance * localProgress) / totalDistance);
+            }
+            elapsedDuration += sourceDuration;
+            traveledDistance += sourceDistance;
+
+            for (int edgeIndex = 0; edgeIndex < pathIndex; edgeIndex++) {
+                double edgeDistance = getPathEdgeDistance(item, edgeIndex);
+                int edgeDuration = getSegmentEdgeDuration(item, edgeIndex, fallbackMoveTime);
+                if (elapsedTicks <= elapsedDuration + edgeDuration) {
+                    double localProgress = (elapsedTicks - elapsedDuration) / edgeDuration;
+                    return (float) ((traveledDistance + edgeDistance * localProgress) / totalDistance);
+                }
+                elapsedDuration += edgeDuration;
+                traveledDistance += edgeDistance;
+            }
+        }
+
+        if (nextOwnerPathIndex > pathIndex) {
+            for (int edgeIndex = pathIndex; edgeIndex < nextOwnerPathIndex; edgeIndex++) {
+                double edgeDistance = getPathEdgeDistance(item, edgeIndex);
+                int edgeDuration = getSegmentEdgeDuration(item, edgeIndex, fallbackMoveTime);
+                if (elapsedTicks <= elapsedDuration + edgeDuration) {
+                    double localProgress = (elapsedTicks - elapsedDuration) / edgeDuration;
+                    return (float) ((traveledDistance + edgeDistance * localProgress) / totalDistance);
+                }
+                elapsedDuration += edgeDuration;
+                traveledDistance += edgeDistance;
+            }
+        } else {
+            double targetDistance = getTargetEdgeDistance(item, pathIndex);
+            int targetDuration = scaleMoveTime(fallbackMoveTime, targetDistance);
+            double localProgress = Math.min(1.0, (elapsedTicks - elapsedDuration) / targetDuration);
+            return (float) ((traveledDistance + targetDistance * localProgress) / totalDistance);
+        }
+
+        return 1.0f;
+    }
+
+    private double getSegmentDistance(MovingTubeItem item, int pathIndex, int nextOwnerPathIndex) {
+        double distance = 0.0;
+        if (item.sourceConnector != null && pathIndex == item.startPathIndex) {
+            distance += getSourceEntryDistance(item);
+            for (int edgeIndex = 0; edgeIndex < pathIndex; edgeIndex++) {
+                distance += getPathEdgeDistance(item, edgeIndex);
+            }
+        }
+
+        if (nextOwnerPathIndex > pathIndex) {
+            for (int edgeIndex = pathIndex; edgeIndex < nextOwnerPathIndex; edgeIndex++) {
+                distance += getPathEdgeDistance(item, edgeIndex);
+            }
+            return distance;
+        }
+        return distance + getTargetEdgeDistance(item, pathIndex);
+    }
+
+    private int getSegmentEdgeDuration(MovingTubeItem item, int edgeIndex, int fallbackMoveTime) {
+        return scaleMoveTime(fallbackMoveTime, getTransportEdgeDistance(item, edgeIndex));
+    }
+
+    private double getTransportEdgeDistance(MovingTubeItem item, int edgeIndex) {
+        double distance = getPathEdgeDistance(item, edgeIndex);
+        if (level == null || distance < 1.0E-6) {
+            return distance;
+        }
+
+        int pumpEndpoints = 0;
+        if (level.getBlockState(item.path.get(edgeIndex)).getBlock() instanceof ItemPumpBlock) {
+            pumpEndpoints++;
+        }
+        if (level.getBlockState(item.path.get(edgeIndex + 1)).getBlock() instanceof ItemPumpBlock) {
+            pumpEndpoints++;
+        }
+
+        // A pump has no item slot of its own. Count only the half-edge on each
+        // side so that tube -> pump -> tube keeps the same cadence as tube -> tube.
+        return distance * (1.0 - pumpEndpoints * 0.5);
+    }
+
+    private static int scaleMoveTime(int moveTime, double distance) {
+        return Math.max(1, (int) Math.ceil(moveTime * Math.max(0.0, distance)));
+    }
+
+    private static double getPathEdgeDistance(MovingTubeItem item, int edgeIndex) {
+        if (edgeIndex < 0 || edgeIndex + 1 >= item.path.size()) {
+            return 0.0;
+        }
+        return Vec3.atCenterOf(item.path.get(edgeIndex))
+                .distanceTo(Vec3.atCenterOf(item.path.get(edgeIndex + 1)));
+    }
+
+    private static double getTargetEdgeDistance(MovingTubeItem item, int pathIndex) {
+        if (item.targetConnector == null || pathIndex < 0 || pathIndex >= item.path.size()) {
+            return 1.0;
+        }
+        return Vec3.atCenterOf(item.path.get(pathIndex))
+                .distanceTo(Vec3.atCenterOf(item.targetConnector));
+    }
+
+    private double getSourceEntryDistance(MovingTubeItem item) {
+        if (item.sourceConnector == null || item.path.isEmpty()) {
+            return 0.0;
+        }
+
+        BlockPos firstPathPos = item.path.get(0);
+        Direction direction = Direction.getNearest(
+                firstPathPos.getX() - item.sourceConnector.getX(),
+                firstPathPos.getY() - item.sourceConnector.getY(),
+                firstPathPos.getZ() - item.sourceConnector.getZ()
+        );
+        Vec3 sourceOutlet = Vec3.atCenterOf(item.sourceConnector)
+                .add(Vec3.atLowerCornerOf(direction.getNormal()).scale(0.42));
+        return sourceOutlet.distanceTo(Vec3.atCenterOf(firstPathPos));
+    }
+
+    private boolean hasRunningPump(MovingTubeItem item) {
+        if (level == null || item == null) {
             return false;
         }
 
-        for (BlockPos controllerPos : controllers) {
-            if (level.getBlockEntity(controllerPos) instanceof ItemPumpBlockEntity pump && pump.isRunning()) {
-                return true;
-            }
+        ensureSpeedControllers(item);
+        int moveTime = calculateMoveTime(item.speedControllers);
+        if (moveTime <= 0) {
+            item.moveTime = 0;
+            item.segmentDuration = 0;
+            return false;
+        }
+        return true;
+    }
+
+    private boolean hasRunningPump(List<MovingTubeItem.SpeedController> speedControllers) {
+        return calculateMoveTime(speedControllers) > 0;
+    }
+
+    private void ensureSpeedControllers(MovingTubeItem item) {
+        long topologyVersion = getTransportTopologyVersion(level);
+        if (item.hasSpeedControllerCache && item.transportTopologyVersion == topologyVersion) {
+            return;
+        }
+        item.speedControllers = findSpeedControllers(item.path);
+        item.hasSpeedControllerCache = true;
+        item.transportTopologyVersion = topologyVersion;
+        item.lastSpeedCheckGameTime = Long.MIN_VALUE;
+    }
+
+    private List<MovingTubeItem.SpeedController> findSpeedControllers(List<BlockPos> path) {
+        if (level == null || path.isEmpty()) {
+            return List.of();
         }
 
-        return false;
+        java.util.ArrayList<MovingTubeItem.SpeedController> speedControllers = new java.util.ArrayList<>();
+        for (BlockPos pathPos : path) {
+            if (level.getBlockEntity(pathPos) instanceof ItemPumpBlockEntity) {
+                speedControllers.add(new MovingTubeItem.SpeedController(pathPos.immutable()));
+            }
+        }
+        return List.copyOf(speedControllers);
     }
 
     private int calculateConnectedLineMoveTime() {
@@ -892,6 +1486,10 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
 
             if (currentBlockEntity instanceof ItemPumpBlockEntity pump && pump.isRunning()) {
                 moveTime = moveTime == 0 ? pump.getMoveTime() : Math.min(moveTime, pump.getMoveTime());
+            }
+
+            if (currentBlockEntity instanceof DeviderBlockEntity && !current.equals(worldPosition)) {
+                continue;
             }
 
             for (BlockPos next : PneumaticLine.getForwardNeighbors(level, current)) {
@@ -920,15 +1518,26 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
             return false;
         }
 
+        if (fromBlockEntity instanceof ValveBlockEntity fromValve
+                && !((ValveBlock) fromValve.getBlockState().getBlock())
+                .allowsTravel(fromValve.getBlockState(), direction)) {
+            return false;
+        }
+
+        if (toBlockEntity instanceof ValveBlockEntity toValve
+                && !((ValveBlock) toValve.getBlockState().getBlock())
+                .allowsTravel(toValve.getBlockState(), direction)) {
+            return false;
+        }
+
         if (fromBlockEntity instanceof ItemPumpBlockEntity fromPump
                 && !fromPump.canTravelTo(level, direction)) {
             return false;
         }
 
         if (fromBlockEntity instanceof ItemPumpBlockEntity fromPump) {
-            Direction flowDirection = ((ItemPumpBlock) fromPump.getBlockState().getBlock())
-                    .getFlowDirection(level, from, fromPump.getBlockState());
-            if (flowDirection != null && flowDirection != direction) {
+            ItemPumpBlock pump = (ItemPumpBlock) fromPump.getBlockState().getBlock();
+            if (!pump.allowsTravel(level, from, fromPump.getBlockState(), direction)) {
                 return false;
             }
         }
@@ -943,9 +1552,8 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
                 return false;
             }
 
-            Direction flowDirection = ((ItemPumpBlock) toPump.getBlockState().getBlock())
-                    .getFlowDirection(level, to, toPump.getBlockState());
-            return flowDirection == null || flowDirection == direction;
+            ItemPumpBlock pump = (ItemPumpBlock) toPump.getBlockState().getBlock();
+            return pump.allowsTravel(level, to, toPump.getBlockState(), direction);
         }
 
         if (toBlockEntity instanceof PneumaticTubeBlockEntity toTube

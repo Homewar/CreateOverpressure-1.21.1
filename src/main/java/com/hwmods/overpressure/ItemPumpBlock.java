@@ -129,10 +129,7 @@ public class ItemPumpBlock extends DirectionalKineticBlock
     }
 
     public boolean allowsTravel(Level level, BlockPos pos, BlockState state, Direction travelDirection) {
-        Direction flowDirection = getFlowDirection(level, pos, state);
-        return flowDirection == null
-                ? canTravelTo(state, travelDirection)
-                : flowDirection == travelDirection;
+        return state.getValue(FACING) == travelDirection;
     }
 
     @Override
@@ -165,6 +162,22 @@ public class ItemPumpBlock extends DirectionalKineticBlock
     }
 
     @Override
+    public void onPlace(BlockState state, Level level, BlockPos pos, BlockState oldState, boolean movedByPiston) {
+        if (!oldState.is(state.getBlock())) {
+            PneumaticTubeBlockEntity.invalidateTransportTopologyAt(level, pos);
+        }
+        super.onPlace(state, level, pos, oldState, movedByPiston);
+    }
+
+    @Override
+    public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
+        if (!state.is(newState.getBlock())) {
+            PneumaticTubeBlockEntity.invalidateTransportTopologyAt(level, pos);
+        }
+        super.onRemove(state, level, pos, newState, movedByPiston);
+    }
+
+    @Override
     protected boolean isPathfindable(BlockState state, PathComputationType pathComputationType) {
         return false;
     }
@@ -194,6 +207,14 @@ public class ItemPumpBlock extends DirectionalKineticBlock
 
         if (state.getBlock() instanceof ItemPumpBlock pump) {
             return pump.canTravelTo(state, directionFromNeighbor);
+        }
+
+        if (state.getBlock() instanceof ValveBlock valve) {
+            return valve.canTravelTo(state, directionFromNeighbor);
+        }
+
+        if (state.getBlock() instanceof ClogSensorBlock sensor) {
+            return sensor.canTravelTo(state, directionFromNeighbor);
         }
 
         return false;

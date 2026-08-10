@@ -66,6 +66,26 @@ public class ModBlockEntities {
                     )
             );
 
+        public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ValveBlockEntity>> VALVE =
+            BLOCK_ENTITIES.register(
+                    "valve",
+                    () -> new BlockEntityType<>(
+                            ValveBlockEntity::new,
+                            Set.of(ModBlocks.VALVE.get()),
+                            null
+                    )
+            );
+
+        public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ClogSensorBlockEntity>> CLOG_SENSOR =
+            BLOCK_ENTITIES.register(
+                    "clog_sensor",
+                    () -> new BlockEntityType<>(
+                            ClogSensorBlockEntity::new,
+                            Set.of(ModBlocks.CLOG_SENSOR.get()),
+                            null
+                    )
+            );
+
         public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<GrindRailBlockEntity>> GRIND_RAIL =
             BLOCK_ENTITIES.register(
                     "grind_rail",

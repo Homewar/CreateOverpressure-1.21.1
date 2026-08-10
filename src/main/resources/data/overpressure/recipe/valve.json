@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " A ",
+    "APA",
+    " A "
+  ],
+  "key": {
+    "A": {
+      "item": "create:andesite_alloy"
+    },
+    "P": {
+      "item": "overpressure:pneumatic_tube"
+    }
+  },
+  "result": {
+    "id": "overpressure:valve"
+  }
+}

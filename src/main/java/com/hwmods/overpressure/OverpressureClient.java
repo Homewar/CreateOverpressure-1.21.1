@@ -18,6 +18,9 @@ public class OverpressureClient {
     public static final ModelResourceLocation PNEUMATIC_CAPSULE_MODEL = ModelResourceLocation.standalone(
             ResourceLocation.fromNamespaceAndPath(Overpressure.MODID, "entity/capsule/pneumo_capsule")
     );
+    public static final ModelResourceLocation DEVIDER_BLOCK_MODEL = ModelResourceLocation.standalone(
+            ResourceLocation.fromNamespaceAndPath(Overpressure.MODID, "block/devider/divider")
+    );
 
     public OverpressureClient(IEventBus modBus, ModContainer container) {
         ItemPumpRenderer.init();
@@ -57,6 +60,14 @@ public class OverpressureClient {
         );
         event.registerBlockEntityRenderer(
                 ModBlockEntities.DEVIDER.get(),
+                DeviderRenderer::new
+        );
+        event.registerBlockEntityRenderer(
+                ModBlockEntities.VALVE.get(),
+                PneumaticTubeRenderer::new
+        );
+        event.registerBlockEntityRenderer(
+                ModBlockEntities.CLOG_SENSOR.get(),
                 PneumaticTubeRenderer::new
         );
         event.registerBlockEntityRenderer(
@@ -67,6 +78,7 @@ public class OverpressureClient {
 
     static void registerAdditionalModels(ModelEvent.RegisterAdditional event) {
         event.register(PNEUMATIC_CAPSULE_MODEL);
+        event.register(DEVIDER_BLOCK_MODEL);
     }
 
     static void modifyBakedModels(ModelEvent.ModifyBakingResult event) {

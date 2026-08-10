@@ -313,7 +313,14 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
     @Override
     protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
         if (state.getBlock() instanceof PneumaticTubeBlock && newState.getBlock() instanceof PneumaticTubeBlock) {
+            if (!state.is(newState.getBlock())) {
+                PneumaticTubeBlockEntity.invalidateClientPathAt(level, pos);
+            }
             return;
+        }
+
+        if (!state.is(newState.getBlock())) {
+            PneumaticTubeBlockEntity.invalidateClientPathAt(level, pos);
         }
 
         if (!level.isClientSide && !state.is(newState.getBlock())
@@ -430,7 +437,7 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
 
     private boolean canNeighborAcceptConnection(BlockState neighborState, Direction directionFromNeighbor) {
         if (neighborState.getBlock() instanceof DeviderBlock) {
-            return directionFromNeighbor == Direction.DOWN;
+            return directionFromNeighbor == neighborState.getValue(DeviderBlock.INPUT);
         }
 
         if (neighborState.getBlock() instanceof CurvaturePneumaticTubeBlock) {
@@ -443,6 +450,14 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
 
         if (neighborState.getBlock() instanceof PneumaticConnectionBlock) {
             return true;
+        }
+
+        if (neighborState.getBlock() instanceof ValveBlock valve) {
+            return valve.canTravelTo(neighborState, directionFromNeighbor);
+        }
+
+        if (neighborState.getBlock() instanceof ClogSensorBlock sensor) {
+            return sensor.canTravelTo(neighborState, directionFromNeighbor);
         }
 
         return neighborState.getBlock() instanceof ItemPumpBlock pump
