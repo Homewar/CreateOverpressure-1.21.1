@@ -1,3 +1,3 @@
 {
-  "parent": "overpressure:block/valve/valve"
+  "parent": "overpressure:block/flow_sensor/flow_sensor"
 }

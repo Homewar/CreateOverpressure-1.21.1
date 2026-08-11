@@ -1,28 +1,52 @@
 {
   "multipart": [
     {
-      "when": { "facing": "down" },
-      "apply": { "model": "overpressure:block/valve/valve", "x": 180 }
+      "when": { "facing": "down", "powered": "false" },
+      "apply": { "model": "overpressure:block/flow_sensor/flow_sensor", "x": 180 }
     },
     {
-      "when": { "facing": "east" },
-      "apply": { "model": "overpressure:block/valve/valve", "x": 90, "y": 90 }
+      "when": { "facing": "east", "powered": "false" },
+      "apply": { "model": "overpressure:block/flow_sensor/flow_sensor", "x": 90, "y": 90 }
     },
     {
-      "when": { "facing": "north" },
-      "apply": { "model": "overpressure:block/valve/valve", "x": 90 }
+      "when": { "facing": "north", "powered": "false" },
+      "apply": { "model": "overpressure:block/flow_sensor/flow_sensor", "x": 90 }
     },
     {
-      "when": { "facing": "south" },
-      "apply": { "model": "overpressure:block/valve/valve", "x": 90, "y": 180 }
+      "when": { "facing": "south", "powered": "false" },
+      "apply": { "model": "overpressure:block/flow_sensor/flow_sensor", "x": 90, "y": 180 }
     },
     {
-      "when": { "facing": "up" },
-      "apply": { "model": "overpressure:block/valve/valve" }
+      "when": { "facing": "up", "powered": "false" },
+      "apply": { "model": "overpressure:block/flow_sensor/flow_sensor" }
     },
     {
-      "when": { "facing": "west" },
-      "apply": { "model": "overpressure:block/valve/valve", "x": 90, "y": 270 }
+      "when": { "facing": "west", "powered": "false" },
+      "apply": { "model": "overpressure:block/flow_sensor/flow_sensor", "x": 90, "y": 270 }
+    },
+    {
+      "when": { "facing": "down", "powered": "true" },
+      "apply": { "model": "overpressure:block/flow_sensor/flow_sensor_clogged", "x": 180 }
+    },
+    {
+      "when": { "facing": "east", "powered": "true" },
+      "apply": { "model": "overpressure:block/flow_sensor/flow_sensor_clogged", "x": 90, "y": 90 }
+    },
+    {
+      "when": { "facing": "north", "powered": "true" },
+      "apply": { "model": "overpressure:block/flow_sensor/flow_sensor_clogged", "x": 90 }
+    },
+    {
+      "when": { "facing": "south", "powered": "true" },
+      "apply": { "model": "overpressure:block/flow_sensor/flow_sensor_clogged", "x": 90, "y": 180 }
+    },
+    {
+      "when": { "facing": "up", "powered": "true" },
+      "apply": { "model": "overpressure:block/flow_sensor/flow_sensor_clogged" }
+    },
+    {
+      "when": { "facing": "west", "powered": "true" },
+      "apply": { "model": "overpressure:block/flow_sensor/flow_sensor_clogged", "x": 90, "y": 270 }
     }
   ]
 }
