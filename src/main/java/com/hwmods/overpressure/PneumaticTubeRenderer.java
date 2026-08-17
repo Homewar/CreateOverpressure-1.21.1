@@ -326,6 +326,7 @@ public class PneumaticTubeRenderer implements BlockEntityRenderer<PneumaticTubeB
         Vec3 current = offset.add(0.5, 0.5, 0.5);
         List<Vec3> points = new ArrayList<>();
         addSourcePrefix(points, currentPos, item, pathIndex);
+        addCurveIngress(points, tube, item, currentPos, pathIndex);
         points.add(current);
         if (nextOwnerPathIndex <= pathIndex) {
             Vec3 next = Vec3.atLowerCornerOf(item.targetConnector.subtract(currentPos)).add(0.5, 0.5, 0.5);
@@ -334,10 +335,55 @@ public class PneumaticTubeRenderer implements BlockEntityRenderer<PneumaticTubeB
         }
 
         for (int pointIndex = pathIndex + 1; pointIndex <= nextOwnerPathIndex; pointIndex++) {
-            Vec3 next = Vec3.atLowerCornerOf(item.path.get(pointIndex).subtract(currentPos)).add(0.5, 0.5, 0.5);
+            Vec3 next = getPathNodePoint(tube, item, currentPos, pointIndex);
             points.add(next);
         }
         return interpolatePath(points, progress);
+    }
+
+    private static void addCurveIngress(
+            List<Vec3> points,
+            PneumaticTubeBlockEntity tube,
+            MovingTubeItem item,
+            BlockPos rendererPos,
+            int pathIndex
+    ) {
+        if (tube.getLevel() == null || pathIndex <= 0) {
+            return;
+        }
+
+        BlockPos previousPos = item.path.get(pathIndex - 1);
+        BlockEntity previousEntity = tube.getLevel().getBlockEntity(previousPos);
+        if (!(previousEntity instanceof CurvaturePneumaticTubeEntity curvatureTube)) {
+            return;
+        }
+
+        Vec3 curveOffset = Vec3.atLowerCornerOf(previousPos.subtract(rendererPos));
+        Vec3 p0 = curveOffset.add(curvatureTube.getP0());
+        Vec3 p3 = curveOffset.add(curvatureTube.getP3());
+        Vec3 currentCenter = Vec3.atLowerCornerOf(item.path.get(pathIndex).subtract(rendererPos))
+                .add(0.5, 0.5, 0.5);
+        points.add(p0.distanceToSqr(currentCenter) <= p3.distanceToSqr(currentCenter) ? p0 : p3);
+    }
+
+    private static Vec3 getPathNodePoint(
+            PneumaticTubeBlockEntity tube,
+            MovingTubeItem item,
+            BlockPos rendererPos,
+            int pathIndex
+    ) {
+        BlockPos pathPos = item.path.get(pathIndex);
+        Vec3 blockOffset = Vec3.atLowerCornerOf(pathPos.subtract(rendererPos));
+        BlockEntity blockEntity = tube.getLevel() == null
+                ? null
+                : tube.getLevel().getBlockEntity(pathPos);
+
+        if (blockEntity instanceof CurvaturePneumaticTubeEntity curvatureTube) {
+            boolean reversed = isCurveReversed(rendererPos, item, pathIndex, curvatureTube);
+            return blockOffset.add(reversed ? curvatureTube.getP3() : curvatureTube.getP0());
+        }
+
+        return blockOffset.add(0.5, 0.5, 0.5);
     }
 
     private static void addSourcePrefix(

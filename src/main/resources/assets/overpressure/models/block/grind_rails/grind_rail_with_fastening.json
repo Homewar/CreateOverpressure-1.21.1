@@ -1,0 +1,67 @@
+{
+	"parent": "minecraft:block/block",
+	"ambientocclusion": false,
+	"credit": "Made with Blockbench",
+	"textures": {
+		"0": "overpressure:block/grind_rails/grind_rail",
+		"particle": "overpressure:block/grind_rails/grind_rail"
+	},
+	"elements": [
+		{
+			"name": "rail",
+			"from": [6.5, 6.5, 0],
+			"to": [9.5, 9.5, 16],
+			"rotation": {"angle": 0, "axis": "y", "origin": [6, 0, 0]},
+			"faces": {
+				"north": {"uv": [10, 1, 13, 4], "texture": "#0"},
+				"east": {"uv": [0, 4, 16, 7], "texture": "#0"},
+				"south": {"uv": [13, 1, 16, 4], "texture": "#0"},
+				"west": {"uv": [0, 13, 16, 16], "texture": "#0"},
+				"up": {"uv": [0, 10, 16, 13], "rotation": 270, "texture": "#0"},
+				"down": {"uv": [0, 7, 16, 10], "rotation": 270, "texture": "#0"}
+			}
+		},
+		{
+			"from": [7, 4.5, 7],
+			"to": [14, 6.5, 9],
+			"rotation": {"angle": 0, "axis": "y", "origin": [7, 4, 7]},
+			"faces": {
+				"north": {"uv": [0, 12, 7, 14], "texture": "#0"},
+				"east": {"uv": [7, 9, 9, 11], "texture": "#0"},
+				"south": {"uv": [0, 9, 7, 11], "texture": "#0"},
+				"west": {"uv": [7, 12, 9, 14], "texture": "#0"},
+				"up": {"uv": [0, 9, 7, 11], "texture": "#0"},
+				"down": {"uv": [0, 9, 7, 11], "texture": "#0"}
+			}
+		},
+		{
+			"from": [12, 6.5, 7],
+			"to": [14, 18.5, 9],
+			"rotation": {"angle": 0, "axis": "y", "origin": [12, 6, 7]},
+			"faces": {
+				"north": {"uv": [4, 4, 6, 16], "texture": "#0"},
+				"east": {"uv": [6, 4, 8, 16], "texture": "#0"},
+				"south": {"uv": [4, 4, 6, 16], "texture": "#0"},
+				"west": {"uv": [6, 4, 8, 16], "texture": "#0"},
+				"up": {"uv": [8, 4, 10, 6], "texture": "#0"},
+				"down": {"uv": [8, 4, 10, 6], "texture": "#0"}
+			}
+		}
+	],
+	"groups": [
+		{
+			"name": "rail",
+			"origin": [8, 8, 8],
+			"scope": 0,
+			"color": 0,
+			"children": [0]
+		},
+		{
+			"name": "derjatel",
+			"origin": [8, 8, 8],
+			"scope": 0,
+			"color": 0,
+			"children": [1, 2]
+		}
+	]
+}

@@ -18,19 +18,24 @@ import net.minecraft.world.level.block.state.BlockState;
 
 public final class TubeNetworkPathfinder {
     public static TubePath findPathToInsertConnector(Level level, BlockPos sourceConnector, BlockPos firstTube) {
-        return findPathToConnector(level, sourceConnector, firstTube);
+        return findPathToConnector(level, sourceConnector, firstTube, false);
+    }
+
+    public static TubePath findPathFromOccupiedTube(Level level, BlockPos sourceTube, BlockPos firstTube) {
+        return findPathToConnector(level, sourceTube, firstTube, true);
     }
 
     private static TubePath findPathToConnector(
             Level level,
             BlockPos sourceConnector,
-            BlockPos firstTube
+            BlockPos firstTube,
+            boolean allowOccupiedFirstTube
     ) {
         if (!isPathNode(level, firstTube)) {
             return new TubePath(List.of(), null);
         }
 
-        if (isOccupiedTube(level, firstTube)) {
+        if (!allowOccupiedFirstTube && isOccupiedTube(level, firstTube)) {
             return new TubePath(List.of(), null);
         }
 
@@ -47,14 +52,17 @@ public final class TubeNetworkPathfinder {
         bestScores.put(firstTube, firstScore);
         previous.put(firstTube, sourceConnector);
 
-        Direction firstDirection = getDirectionBetween(sourceConnector, firstTube);
-
-        if (firstDirection == null || !canTravelBetween(level, sourceConnector, firstTube, firstDirection)) {
-            return new TubePath(List.of(), null);
+        boolean waitingForJunctionMode = false;
+        if (!canTravelBetween(level, sourceConnector, firstTube)) {
+            if (!isPotentialJunctionTransition(level, sourceConnector, null, firstTube)) {
+                return new TubePath(List.of(), null);
+            }
+            waitingForJunctionMode = true;
         }
 
         List<BlockPos> spillPath = List.of();
         BlockPos spillTarget = null;
+        boolean waitingForSaturatedBranch = false;
 
         while (!queue.isEmpty()) {
             SearchNode node = queue.remove();
@@ -96,7 +104,7 @@ public final class TubeNetworkPathfinder {
 
             BlockPos saturatedPreferredBranch = getSaturatedPreferredBranch(level, current, previousPos);
 
-            for (BlockPos next : PneumaticLine.getForwardNeighbors(level, current, previousPos)) {
+            for (BlockPos next : getSearchNeighbors(level, current, previousPos)) {
                 if (next.equals(sourceConnector)) {
                     continue;
                 }
@@ -106,11 +114,15 @@ public final class TubeNetworkPathfinder {
                 }
 
                 if (next.equals(saturatedPreferredBranch) && isOccupiedTube(level, next)) {
+                    waitingForSaturatedBranch = true;
                     continue;
                 }
 
                 if (!canTravelBetween(level, current, next)) {
-                    continue;
+                    if (!isPotentialJunctionTransition(level, current, previousPos, next)) {
+                        continue;
+                    }
+                    waitingForJunctionMode = true;
                 }
 
                 RouteScore nextScore = new RouteScore(
@@ -128,11 +140,71 @@ public final class TubeNetworkPathfinder {
             }
         }
 
-        if (spillTarget != null) {
+        if (spillTarget != null
+                && !waitingForSaturatedBranch
+                && !waitingForJunctionMode
+                && !containsMergerPassage(level, spillPath)) {
             return new TubePath(spillPath, spillTarget, true);
         }
 
         return new TubePath(List.of(), null);
+    }
+
+    private static boolean containsMergerPassage(Level level, List<BlockPos> path) {
+        for (int index = 1; index + 1 < path.size(); index++) {
+            if (level.getBlockEntity(path.get(index)) instanceof DeviderBlockEntity devider
+                    && devider.isMergerPassage(path.get(index - 1), path.get(index + 1))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static List<BlockPos> getSearchNeighbors(Level level, BlockPos current, BlockPos previous) {
+        if (!(level.getBlockEntity(current) instanceof DeviderBlockEntity devider) || previous == null) {
+            return PneumaticLine.getForwardNeighbors(level, current, previous);
+        }
+
+        if (devider.isStraightPosition(previous)) {
+            return devider.getOrderedBranchPositions();
+        }
+        if (devider.isBranchPosition(previous)) {
+            return List.of(devider.getStraightPosition());
+        }
+        return List.of();
+    }
+
+    private static boolean isPotentialJunctionTransition(
+            Level level,
+            BlockPos current,
+            @Nullable BlockPos previous,
+            BlockPos next
+    ) {
+        if (level.getBlockEntity(next) instanceof DeviderBlockEntity devider) {
+            return isUsableJunctionPort(level, devider, current);
+        }
+
+        if (!(level.getBlockEntity(current) instanceof DeviderBlockEntity devider) || previous == null) {
+            return false;
+        }
+
+        boolean dividerPassage = devider.isStraightPosition(previous)
+                && devider.isBranchPosition(next);
+        boolean mergerPassage = devider.isBranchPosition(previous)
+                && devider.isStraightPosition(next);
+        return (dividerPassage || mergerPassage)
+                && isUsableJunctionPort(level, devider, previous)
+                && isUsableJunctionPort(level, devider, next);
+    }
+
+    private static boolean isUsableJunctionPort(Level level, DeviderBlockEntity devider, BlockPos portPos) {
+        if (devider.isStraightPosition(portPos)) {
+            return level.getBlockEntity(portPos) instanceof PneumaticTubeBlockEntity
+                    || level.getBlockEntity(portPos) instanceof ItemPumpBlockEntity;
+        }
+        return devider.isBranchPosition(portPos)
+                && level.getBlockState(portPos).getBlock() instanceof CurvaturePneumaticTubeBlock
+                && level.getBlockEntity(portPos) instanceof PneumaticTubeBlockEntity;
     }
 
     @Nullable

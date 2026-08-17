@@ -3,6 +3,10 @@
   "package": "com.hwmods.overpressure.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [],
+  "client": [
+    "ValueSettingsClientMixin",
+    "GrindRailPlayerPoseMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   },

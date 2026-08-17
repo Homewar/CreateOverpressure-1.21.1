@@ -28,6 +28,10 @@ public class Config {
             .comment("A list of items to log on common setup.")
             .defineListAllowEmpty("items", List.of("minecraft:iron_ingot"), () -> "", Config::validateItemName);
 
+    public static final ModConfigSpec.DoubleValue SOUND_VOLUME = BUILDER
+            .comment("Volume for all grind rail sounds.")
+            .defineInRange("soundVolume", 0.5, 0.0, 1.0);
+
     static final ModConfigSpec SPEC = BUILDER.build();
 
     private static boolean validateItemName(final Object obj) {

@@ -91,7 +91,7 @@ public class ModBlockEntities {
                     "grind_rail",
                     () -> new BlockEntityType<>(
                             GrindRailBlockEntity::new,
-                            Set.of(ModBlocks.GRIND_RAIL.get()),
+                            Set.of(ModBlocks.GRIND_RAIL.get(), ModBlocks.GRIND_RAIL_SUPPORT.get()),
                             null
                     )
             );

@@ -54,7 +54,10 @@ public class DeviderRenderer extends PneumaticTubeRenderer {
                 poseStack.last(),
                 bufferSource.getBuffer(Sheets.cutoutBlockSheet()),
                 Blocks.AIR.defaultBlockState(),
-                minecraft.getModelManager().getModel(OverpressureClient.DEVIDER_BLOCK_MODEL),
+                minecraft.getModelManager().getModel(devider.getJunctionRole()
+                        == DeviderBlockEntity.JunctionRole.MERGER
+                        ? OverpressureClient.DEVIDER_MERGE_BLOCK_MODEL
+                        : OverpressureClient.DEVIDER_BLOCK_MODEL),
                 1.0f,
                 1.0f,
                 1.0f,

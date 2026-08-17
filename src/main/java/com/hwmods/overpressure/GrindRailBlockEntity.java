@@ -1,12 +1,17 @@
 package com.hwmods.overpressure;
 
+import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.state.BlockState;
@@ -20,6 +25,8 @@ public class GrindRailBlockEntity extends SmartBlockEntity {
     private UUID sectionId = UUID.randomUUID();
     private double renderStart;
     private double renderEnd = 1.0;
+    private boolean curveInitialized;
+    private final Map<Direction, UUID> edgeSections = new EnumMap<>(Direction.class);
 
     public GrindRailBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlockEntities.GRIND_RAIL.get(), pos, state);
@@ -46,6 +53,16 @@ public class GrindRailBlockEntity extends SmartBlockEntity {
         sectionId = id;
         renderStart = start;
         renderEnd = end;
+        curveInitialized = true;
+
+        if (level != null && getBlockState().getBlock() instanceof GrindRailSupportBlock
+                && !getBlockState().getValue(GrindRailSupportBlock.CONNECTED)) {
+            level.setBlock(
+                    worldPosition,
+                    getBlockState().setValue(GrindRailSupportBlock.CONNECTED, true),
+                    net.minecraft.world.level.block.Block.UPDATE_CLIENTS
+            );
+        }
         setChanged();
 
         if (level != null) {
@@ -94,7 +111,78 @@ public class GrindRailBlockEntity extends SmartBlockEntity {
     }
 
     public boolean shouldRenderCurve() {
-        return renderEnd > renderStart;
+        return curveInitialized && renderEnd > renderStart;
+    }
+
+    public boolean hasCurve() {
+        return curveInitialized;
+    }
+
+    public boolean isEdgeOccupied(Direction edge) {
+        if (edgeSections.containsKey(edge)) {
+            return true;
+        }
+        return curveInitialized
+                && getBlockState().getBlock() instanceof GrindRailSupportBlock
+                && edgeSections.isEmpty();
+    }
+
+    public boolean hasSection(UUID id) {
+        return sectionId.equals(id) || edgeSections.containsValue(id);
+    }
+
+    public Set<UUID> getConnectedSectionIds() {
+        Set<UUID> sections = new HashSet<>(edgeSections.values());
+        if (curveInitialized && getBlockState().getBlock() instanceof GrindRailSupportBlock) {
+            sections.add(sectionId);
+        }
+        return sections;
+    }
+
+    public void connectEdge(Direction edge, UUID id) {
+        if (!edge.getAxis().isHorizontal()) {
+            return;
+        }
+        edgeSections.put(edge, id);
+        updateSupportState();
+        setChanged();
+        if (level != null) {
+            sendData();
+        }
+    }
+
+    public void disconnectSection(UUID id) {
+        boolean changed = edgeSections.entrySet().removeIf(entry -> entry.getValue().equals(id));
+        if (curveInitialized && sectionId.equals(id)
+                && getBlockState().getBlock() instanceof GrindRailSupportBlock) {
+            curveInitialized = false;
+            renderStart = 0.0;
+            renderEnd = 0.0;
+            changed = true;
+        }
+        if (!changed) {
+            return;
+        }
+
+        updateSupportState();
+        setChanged();
+        if (level != null) {
+            sendData();
+        }
+    }
+
+    private void updateSupportState() {
+        if (level == null || !(getBlockState().getBlock() instanceof GrindRailSupportBlock)) {
+            return;
+        }
+        boolean connected = !edgeSections.isEmpty() || curveInitialized;
+        if (getBlockState().getValue(GrindRailSupportBlock.CONNECTED) != connected) {
+            level.setBlock(
+                    worldPosition,
+                    getBlockState().setValue(GrindRailSupportBlock.CONNECTED, connected),
+                    net.minecraft.world.level.block.Block.UPDATE_CLIENTS
+            );
+        }
     }
 
     public double getRenderStart() {
@@ -115,6 +203,10 @@ public class GrindRailBlockEntity extends SmartBlockEntity {
         tag.putUUID("section_id", sectionId);
         tag.putDouble("render_start", renderStart);
         tag.putDouble("render_end", renderEnd);
+        tag.putBoolean("curve_initialized", curveInitialized);
+        for (Map.Entry<Direction, UUID> entry : edgeSections.entrySet()) {
+            tag.putUUID("edge_" + entry.getKey().getName(), entry.getValue());
+        }
     }
 
     @Override
@@ -129,6 +221,16 @@ public class GrindRailBlockEntity extends SmartBlockEntity {
         }
         renderStart = tag.getDouble("render_start");
         renderEnd = tag.contains("render_end") ? tag.getDouble("render_end") : 1.0;
+        curveInitialized = tag.contains("curve_initialized")
+                ? tag.getBoolean("curve_initialized")
+                : getBlockState().is(ModBlocks.GRIND_RAIL.get());
+        edgeSections.clear();
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            String key = "edge_" + direction.getName();
+            if (tag.hasUUID(key)) {
+                edgeSections.put(direction, tag.getUUID(key));
+            }
+        }
     }
 
     private static void savePoint(CompoundTag tag, String key, Vec3 point) {

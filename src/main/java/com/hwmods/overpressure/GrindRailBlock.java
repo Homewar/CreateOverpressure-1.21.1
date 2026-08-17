@@ -86,22 +86,65 @@ public class GrindRailBlock extends BaseEntityBlock {
             return;
         }
 
-        UUID sectionId = originRail.getSectionId();
+        if (level.getBlockState(origin).getBlock() instanceof GrindRailSupportBlock) {
+            for (UUID connectedSection : originRail.getConnectedSectionIds()) {
+                destroySection(level, origin, connectedSection, player);
+            }
+            return;
+        }
+
+        destroySection(level, origin, originRail.getSectionId(), player);
+    }
+
+    private void destroySection(Level level, BlockPos origin, UUID sectionId, @Nullable Player player) {
         Set<BlockPos> section = collectSection(level, origin, sectionId);
-        if (section.size() <= 1) {
+        if (section.size() <= 1 && !(level.getBlockState(origin).getBlock() instanceof GrindRailSupportBlock)) {
             return;
         }
 
         DESTROYING.addAll(section);
         try {
+            disconnectSupports(level, section, sectionId);
             for (BlockPos railPos : section) {
-                if (!railPos.equals(origin) && level.getBlockState(railPos).is(this)) {
+                BlockState railState = level.getBlockState(railPos);
+                if (railState.getBlock() instanceof GrindRailSupportBlock) {
+                    if (level.getBlockEntity(railPos) instanceof GrindRailBlockEntity support) {
+                        support.disconnectSection(sectionId);
+                    }
+                    continue;
+                }
+                if (!railPos.equals(origin) && railState.is(ModBlocks.GRIND_RAIL.get())) {
                     level.destroyBlock(railPos, true, player);
                 }
             }
         } finally {
             DESTROYING.removeAll(section);
         }
+    }
+
+    private void disconnectSupports(Level level, Set<BlockPos> section, UUID sectionId) {
+        Set<BlockPos> checked = new HashSet<>();
+        for (BlockPos railPos : section) {
+            for (int x = -1; x <= 1; x++) {
+                for (int y = -1; y <= 1; y++) {
+                    for (int z = -1; z <= 1; z++) {
+                        BlockPos candidate = railPos.offset(x, y, z);
+                        if (!checked.add(candidate)) {
+                            continue;
+                        }
+                        if (level.getBlockState(candidate).getBlock() instanceof GrindRailSupportBlock
+                                && level.getBlockEntity(candidate) instanceof GrindRailBlockEntity support
+                                && support.hasSection(sectionId)) {
+                            support.disconnectSection(sectionId);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    public static boolean isRailMarker(BlockState state) {
+        return state.is(ModBlocks.GRIND_RAIL.get()) || state.is(ModBlocks.GRIND_RAIL_SUPPORT.get());
     }
 
     private Set<BlockPos> collectSection(Level level, BlockPos origin, UUID sectionId) {

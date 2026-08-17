@@ -11,13 +11,19 @@ import net.minecraft.world.phys.Vec3;
 
 public class DeviderModeSlot extends ValueBoxTransform {
     private static final double SLOT_HEIGHT = 13.35 / 16.0;
+    private final double verticalOffset;
+
+    public DeviderModeSlot(double verticalOffset) {
+        this.verticalOffset = verticalOffset;
+    }
 
     @Override
     public Vec3 getLocalOffset(LevelAccessor level, BlockPos pos, BlockState state) {
         net.minecraft.core.Direction face = state.getValue(DeviderBlock.INPUT).getOpposite();
-        return new Vec3(0.5, 0.5, 0.5).add(
-                Vec3.atLowerCornerOf(face.getNormal()).scale(SLOT_HEIGHT - 0.5)
-        );
+        net.minecraft.core.Direction vertical = DeviderBlock.getFrontDirection(state);
+        return new Vec3(0.5, 0.5, 0.5)
+                .add(Vec3.atLowerCornerOf(face.getNormal()).scale(SLOT_HEIGHT - 0.5))
+                .add(Vec3.atLowerCornerOf(vertical.getNormal()).scale(verticalOffset));
     }
 
     @Override
@@ -31,5 +37,10 @@ public class DeviderModeSlot extends ValueBoxTransform {
             case NORTH -> {
             }
         }
+    }
+
+    @Override
+    public float getScale() {
+        return 0.5f;
     }
 }

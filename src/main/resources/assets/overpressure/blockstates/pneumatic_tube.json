@@ -188,7 +188,14 @@
     {
       "when": { "has_rim": "true", "rim": "down" },
       "apply": { "model": "overpressure:block/item_pipe/rim/rim_down" }
-    }
+    },
+
+    { "when": { "has_second_rim": "true", "rim": "north" }, "apply": { "model": "overpressure:block/item_pipe/rim/rim_south" } },
+    { "when": { "has_second_rim": "true", "rim": "south" }, "apply": { "model": "overpressure:block/item_pipe/rim/rim_north" } },
+    { "when": { "has_second_rim": "true", "rim": "east" }, "apply": { "model": "overpressure:block/item_pipe/rim/rim_west" } },
+    { "when": { "has_second_rim": "true", "rim": "west" }, "apply": { "model": "overpressure:block/item_pipe/rim/rim_east" } },
+    { "when": { "has_second_rim": "true", "rim": "up" }, "apply": { "model": "overpressure:block/item_pipe/rim/rim_down" } },
+    { "when": { "has_second_rim": "true", "rim": "down" }, "apply": { "model": "overpressure:block/item_pipe/rim/rim_up" } }
   ]
 }
 

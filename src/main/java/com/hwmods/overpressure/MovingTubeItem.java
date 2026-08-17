@@ -11,6 +11,7 @@ public class MovingTubeItem {
 
     public ItemStack stack;
     public List<BlockPos> path;
+    public List<BlockPos> reservedMergerPassages;
     public List<SpeedController> speedControllers;
     public BlockPos sourceConnector;
     public BlockPos targetConnector;
@@ -25,6 +26,7 @@ public class MovingTubeItem {
     public long startedAtGameTime;
     public boolean waitingForNextTube;
     public boolean waitingAtDestination;
+    public boolean protectedFromJunctionSpill;
     public boolean hasSpeedControllerCache;
     public long transportTopologyVersion;
     public long lastSpeedCheckGameTime;
@@ -33,6 +35,7 @@ public class MovingTubeItem {
     public MovingTubeItem(ItemStack stack, List<BlockPos> path, BlockPos targetConnector) {
         this.stack = stack;
         this.path = path;
+        this.reservedMergerPassages = List.of();
         this.speedControllers = List.of();
         this.sourceConnector = null;
         this.targetConnector = targetConnector;
@@ -47,6 +50,7 @@ public class MovingTubeItem {
         this.startedAtGameTime = 0L;
         this.waitingForNextTube = false;
         this.waitingAtDestination = false;
+        this.protectedFromJunctionSpill = false;
         this.hasSpeedControllerCache = false;
         this.transportTopologyVersion = Long.MIN_VALUE;
         this.lastSpeedCheckGameTime = Long.MIN_VALUE;

@@ -3,24 +3,23 @@ package com.hwmods.overpressure;
 import java.util.List;
 
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
-import com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.INamedIconOptions;
-import com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.ScrollOptionBehaviour;
-import com.simibubi.create.foundation.gui.AllIcons;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
 public class DeviderBlockEntity extends PneumaticTubeBlockEntity {
     public static final double OUTPUT_SIDE_OFFSET = 14.0606601718 / 16.0 - 0.5;
     public static final double OUTPUT_Y = 10.9393398282 / 16.0;
-    private boolean preferPositiveBranch;
-    private boolean preferPositiveMergeInput;
-    private ScrollOptionBehaviour<RoutingMode> routingMode;
+
+    private boolean preferLeftBranch = true;
+    private boolean preferLeftMergeInput = true;
+    private DeviderGearBehaviour gearSelector;
 
     public DeviderBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlockEntities.DEVIDER.get(), pos, state);
@@ -29,49 +28,55 @@ public class DeviderBlockEntity extends PneumaticTubeBlockEntity {
     @Override
     public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
         super.addBehaviours(behaviours);
-        routingMode = new ScrollOptionBehaviour<>(
-                RoutingMode.class,
-                Component.translatable("overpressure.devider.routing_mode"),
+
+        gearSelector = new DeviderGearBehaviour(
+                Component.translatable("overpressure.devider.gear_selector"),
                 this,
-                new DeviderModeSlot()
+                new DeviderModeSlot(0)
         );
-        behaviours.add(routingMode);
+        gearSelector.withCallback(this::onConfigurationChanged);
+        behaviours.add(gearSelector);
+    }
+
+    private void onConfigurationChanged(int ignoredValue) {
+        if (level != null) {
+            PneumaticTubeBlockEntity.invalidateTransportTopologyAt(level, worldPosition);
+        }
     }
 
     @Override
-    public boolean canTravelTo(net.minecraft.world.level.Level level, Direction direction) {
-        return direction == getInputDirection() || isBranchDirectionEnabled(direction);
+    public boolean canTravelTo(Level level, Direction direction) {
+        return direction == getInputDirection() || isBranchDirection(direction);
     }
 
     public List<BlockPos> getForwardPositions(BlockPos previousPos) {
-        if (isStraightPosition(previousPos)) {
+        if (getJunctionRole() == JunctionRole.DIVIDER && isStraightPosition(previousPos)) {
             return getOrderedBranchPositions();
         }
-        if (isBranchPositionEnabled(previousPos)) {
+        if (getJunctionRole() == JunctionRole.MERGER && isBranchInputEnabled(previousPos)) {
             return List.of(getStraightPosition());
         }
         return List.of();
     }
 
     public List<BlockPos> getConnectedPortPositions() {
-        java.util.ArrayList<BlockPos> positions = new java.util.ArrayList<>(3);
-        positions.add(getStraightPosition());
-        positions.addAll(getOrderedBranchPositions());
-        return positions;
+        return List.of(
+                getStraightPosition(),
+                worldPosition.relative(getLeftOutputDirection()),
+                worldPosition.relative(getRightOutputDirection())
+        );
     }
 
     public List<BlockPos> getOrderedBranchPositions() {
-        Direction positive = Direction.get(Direction.AxisDirection.POSITIVE, getOutputAxis());
-        Direction negative = positive.getOpposite();
-
         if (getRoutingMode() == RoutingMode.REDSTONE) {
-            Direction selected = getBlockState().getValue(DeviderBlock.POWERED)
-                    ? getRightOutputDirection()
-                    : getLeftOutputDirection();
-            return List.of(worldPosition.relative(selected));
+            return List.of(worldPosition.relative(getRedstoneSelectedDirection()));
         }
 
-        Direction first = preferPositiveBranch ? positive : negative;
+        Direction first = switch (getAutomaticBranchMode()) {
+            case LEFT_PRIORITY -> getLeftOutputDirection();
+            case BALANCED -> preferLeftBranch ? getLeftOutputDirection() : getRightOutputDirection();
+            case RIGHT_PRIORITY -> getRightOutputDirection();
+        };
         return List.of(worldPosition.relative(first), worldPosition.relative(first.getOpposite()));
     }
 
@@ -87,74 +92,87 @@ public class DeviderBlockEntity extends PneumaticTubeBlockEntity {
     }
 
     public boolean isStraightPosition(BlockPos pos) {
-        return pos.equals(getStraightPosition());
+        return pos != null && pos.equals(getStraightPosition());
     }
 
     public boolean isBranchPosition(BlockPos pos) {
-        return pos.equals(worldPosition.relative(getLeftOutputDirection()))
-                || pos.equals(worldPosition.relative(getRightOutputDirection()));
+        return pos != null && (pos.equals(worldPosition.relative(getLeftOutputDirection()))
+                || pos.equals(worldPosition.relative(getRightOutputDirection())));
     }
 
-    public boolean isBranchPositionEnabled(BlockPos pos) {
-        Direction direction = Direction.getNearest(
-                pos.getX() - worldPosition.getX(),
-                pos.getY() - worldPosition.getY(),
-                pos.getZ() - worldPosition.getZ()
-        );
-        return worldPosition.relative(direction).equals(pos) && isBranchDirectionEnabled(direction);
+    public boolean isBranchOutputEnabled(BlockPos pos) {
+        return getJunctionRole() == JunctionRole.DIVIDER && isSelectedBranch(pos);
     }
 
-    private boolean isBranchDirectionEnabled(Direction direction) {
-        if (direction != getLeftOutputDirection() && direction != getRightOutputDirection()) {
-            return false;
-        }
+    public boolean isBranchInputEnabled(BlockPos pos) {
+        return getJunctionRole() == JunctionRole.MERGER && isSelectedBranch(pos);
+    }
 
-        if (getRoutingMode() != RoutingMode.REDSTONE) {
-            return true;
-        }
+    public boolean isRedstoneMergerPassage(BlockPos branchPos, BlockPos straightPos) {
+        return getJunctionRole() == JunctionRole.MERGER
+                && getRoutingMode() == RoutingMode.REDSTONE
+                && isMergerPassage(branchPos, straightPos);
+    }
 
-        Direction selected = getBlockState().getValue(DeviderBlock.POWERED)
-                ? getRightOutputDirection()
-                : getLeftOutputDirection();
-        return direction == selected;
+    public boolean isMergerPassage(BlockPos branchPos, BlockPos straightPos) {
+        return isBranchPosition(branchPos) && isStraightPosition(straightPos);
+    }
+
+    private boolean isSelectedBranch(BlockPos pos) {
+        return isBranchPosition(pos)
+                && (getRoutingMode() != RoutingMode.REDSTONE
+                || pos.equals(worldPosition.relative(getRedstoneSelectedDirection())));
+    }
+
+    private boolean isBranchDirection(Direction direction) {
+        return direction == getLeftOutputDirection() || direction == getRightOutputDirection();
+    }
+
+    private Direction getRedstoneSelectedDirection() {
+        boolean defaultLeft = getRedstoneDefaultBranch() == RedstoneDefaultBranch.LEFT;
+        boolean selectLeft = getBlockState().getValue(DeviderBlock.POWERED) ? !defaultLeft : defaultLeft;
+        return selectLeft ? getLeftOutputDirection() : getRightOutputDirection();
     }
 
     public void markBranchUsed(BlockPos branchPos) {
-        if (getRoutingMode() != RoutingMode.DISTRIBUTE) {
+        if (getRoutingMode() != RoutingMode.AUTOMATIC
+                || getAutomaticBranchMode() != AutomaticBranchMode.BALANCED) {
             return;
         }
-
-        Direction positive = Direction.get(Direction.AxisDirection.POSITIVE, getOutputAxis());
-        preferPositiveBranch = !branchPos.equals(worldPosition.relative(positive));
+        preferLeftBranch = !branchPos.equals(worldPosition.relative(getLeftOutputDirection()));
         setChanged();
     }
 
-    public boolean canMergeFrom(net.minecraft.world.level.Level level, BlockPos branchPos) {
-        if (!isBranchPositionEnabled(branchPos)) {
+    public boolean canMergeFrom(Level level, BlockPos branchPos) {
+        if (!isBranchInputEnabled(branchPos)) {
             return false;
         }
         if (getRoutingMode() == RoutingMode.REDSTONE) {
             return true;
         }
 
-        Direction positive = Direction.get(Direction.AxisDirection.POSITIVE, getOutputAxis());
-        BlockPos preferredInput = worldPosition.relative(
-                preferPositiveMergeInput ? positive : positive.getOpposite()
-        );
+        BlockPos preferredInput;
+        if (getAutomaticBranchMode() == AutomaticBranchMode.BALANCED) {
+            Direction preferredDirection = preferLeftMergeInput
+                    ? getLeftOutputDirection()
+                    : getRightOutputDirection();
+            preferredInput = worldPosition.relative(preferredDirection);
+        } else {
+            preferredInput = getOrderedBranchPositions().get(0);
+        }
         return branchPos.equals(preferredInput) || !hasPendingMergeItem(level, preferredInput);
     }
 
     public void markMergeInputUsed(BlockPos branchPos) {
-        if (getRoutingMode() != RoutingMode.DISTRIBUTE) {
+        if (getRoutingMode() != RoutingMode.AUTOMATIC
+                || getAutomaticBranchMode() != AutomaticBranchMode.BALANCED) {
             return;
         }
-
-        Direction positive = Direction.get(Direction.AxisDirection.POSITIVE, getOutputAxis());
-        preferPositiveMergeInput = !branchPos.equals(worldPosition.relative(positive));
+        preferLeftMergeInput = !branchPos.equals(worldPosition.relative(getLeftOutputDirection()));
         setChanged();
     }
 
-    private boolean hasPendingMergeItem(net.minecraft.world.level.Level level, BlockPos branchPos) {
+    private boolean hasPendingMergeItem(Level level, BlockPos branchPos) {
         BlockPos itemTubePos = branchPos;
         int dividerOffset = 1;
         if (level.getBlockEntity(branchPos) instanceof ItemPumpBlockEntity) {
@@ -194,47 +212,80 @@ public class DeviderBlockEntity extends PneumaticTubeBlockEntity {
         return getBlockState().getValue(DeviderBlock.INPUT);
     }
 
-    public RoutingMode getRoutingMode() {
-        return routingMode == null ? RoutingMode.DISTRIBUTE : routingMode.get();
+    public JunctionRole getJunctionRole() {
+        return gearSelector == null ? JunctionRole.DIVIDER : gearSelector.getRole();
     }
 
-    public enum RoutingMode implements INamedIconOptions {
-        DISTRIBUTE(AllIcons.I_TUNNEL_ROUND_ROBIN, "overpressure.devider.routing_mode.distribute"),
-        REDSTONE(AllIcons.I_ACTIVE, "overpressure.devider.routing_mode.redstone");
+    public RoutingMode getRoutingMode() {
+        return getRoutingSelection().isRedstone() ? RoutingMode.REDSTONE : RoutingMode.AUTOMATIC;
+    }
 
-        private final AllIcons icon;
-        private final String translationKey;
+    public AutomaticBranchMode getAutomaticBranchMode() {
+        return switch (getRoutingSelection()) {
+            case LEFT_PRIORITY -> AutomaticBranchMode.LEFT_PRIORITY;
+            case RIGHT_PRIORITY -> AutomaticBranchMode.RIGHT_PRIORITY;
+            default -> AutomaticBranchMode.BALANCED;
+        };
+    }
 
-        RoutingMode(AllIcons icon, String translationKey) {
-            this.icon = icon;
-            this.translationKey = translationKey;
-        }
+    public RedstoneDefaultBranch getRedstoneDefaultBranch() {
+        return getRoutingSelection() == RoutingSelection.REDSTONE_INVERTED
+                ? RedstoneDefaultBranch.RIGHT
+                : RedstoneDefaultBranch.LEFT;
+    }
 
-        @Override
-        public AllIcons getIcon() {
-            return icon;
-        }
-
-        @Override
-        public String getTranslationKey() {
-            return translationKey;
-        }
+    public RoutingSelection getRoutingSelection() {
+        return gearSelector == null ? RoutingSelection.BALANCED : gearSelector.getRoutingSelection();
     }
 
     @Override
     protected void write(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
         super.write(tag, registries, clientPacket);
-        tag.putBoolean("prefer_positive_branch", preferPositiveBranch);
-        tag.putBoolean("prefer_positive_merge_input", preferPositiveMergeInput);
+        tag.putBoolean("PreferLeftBranch", preferLeftBranch);
+        tag.putBoolean("PreferLeftMergeInput", preferLeftMergeInput);
     }
 
     @Override
     protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
         super.read(tag, registries, clientPacket);
-        preferPositiveBranch = tag.contains("prefer_positive_branch")
-                ? tag.getBoolean("prefer_positive_branch")
-                : tag.getBoolean("prefer_positive_output");
-        preferPositiveMergeInput = tag.getBoolean("prefer_positive_merge_input");
+        if (tag.contains("PreferLeftBranch")) {
+            preferLeftBranch = tag.getBoolean("PreferLeftBranch");
+        }
+        if (tag.contains("PreferLeftMergeInput")) {
+            preferLeftMergeInput = tag.getBoolean("PreferLeftMergeInput");
+        }
     }
 
+    public enum JunctionRole {
+        DIVIDER,
+        MERGER
+    }
+
+    public enum RoutingMode {
+        AUTOMATIC,
+        REDSTONE
+    }
+
+    public enum AutomaticBranchMode {
+        LEFT_PRIORITY,
+        BALANCED,
+        RIGHT_PRIORITY
+    }
+
+    public enum RedstoneDefaultBranch {
+        LEFT,
+        RIGHT
+    }
+
+    public enum RoutingSelection {
+        LEFT_PRIORITY,
+        BALANCED,
+        RIGHT_PRIORITY,
+        REDSTONE,
+        REDSTONE_INVERTED;
+
+        public boolean isRedstone() {
+            return this == REDSTONE || this == REDSTONE_INVERTED;
+        }
+    }
 }

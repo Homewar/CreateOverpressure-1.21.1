@@ -14,8 +14,17 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 public class GrindRailRenderer implements BlockEntityRenderer<GrindRailBlockEntity> {
-    private static final ResourceLocation TEXTURE = ResourceLocation.withDefaultNamespace("textures/block/iron_block.png");
-    private static final double HALF_SIZE = 0.085;
+    private static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath(
+            Overpressure.MODID,
+            "textures/block/grind_rails/grind_rail.png"
+    );
+    private static final double HALF_SIZE = 1.5 / 16.0;
+    private static final float[][] FACE_V = {
+            { 10.0f / 16.0f, 13.0f / 16.0f },
+            { 13.0f / 16.0f, 1.0f },
+            { 7.0f / 16.0f, 10.0f / 16.0f },
+            { 4.0f / 16.0f, 7.0f / 16.0f }
+    };
     private static final Vec3 WORLD_UP = new Vec3(0.0, 1.0, 0.0);
     private static final Vec3 WORLD_EAST = new Vec3(1.0, 0.0, 0.0);
 
@@ -61,21 +70,29 @@ public class GrindRailRenderer implements BlockEntityRenderer<GrindRailBlockEnti
         for (int index = 0; index < segments; index++) {
             Vec3[] from = sections[index];
             Vec3[] to = sections[index + 1];
-            float u0 = index / (float) segments;
-            float u1 = (index + 1) / (float) segments;
-            addQuad(buffer, pose, from[0], from[1], to[1], to[0], u0, u1, packedLight, packedOverlay);
-            addQuad(buffer, pose, from[1], from[2], to[2], to[1], u0, u1, packedLight, packedOverlay);
-            addQuad(buffer, pose, from[2], from[3], to[3], to[2], u0, u1, packedLight, packedOverlay);
-            addQuad(buffer, pose, from[3], from[0], to[0], to[3], u0, u1, packedLight, packedOverlay);
+            double t0 = rail.getRenderStart()
+                    + (rail.getRenderEnd() - rail.getRenderStart()) * index / segments;
+            double t1 = rail.getRenderStart()
+                    + (rail.getRenderEnd() - rail.getRenderStart()) * (index + 1) / segments;
+            float textureLength = (float) getControlLength(rail);
+            float u0 = (float) t0 * textureLength;
+            float u1 = (float) t1 * textureLength;
+            addQuad(buffer, pose, from[0], from[1], to[1], to[0], u0, u1, FACE_V[0], packedLight, packedOverlay);
+            addQuad(buffer, pose, from[1], from[2], to[2], to[1], u0, u1, FACE_V[1], packedLight, packedOverlay);
+            addQuad(buffer, pose, from[2], from[3], to[3], to[2], u0, u1, FACE_V[2], packedLight, packedOverlay);
+            addQuad(buffer, pose, from[3], from[0], to[0], to[3], u0, u1, FACE_V[3], packedLight, packedOverlay);
         }
     }
 
     private int getSegmentCount(GrindRailBlockEntity rail) {
-        double controlLength = (rail.getWorldP0().distanceTo(rail.getWorldP1())
-                + rail.getWorldP1().distanceTo(rail.getWorldP2())
-                + rail.getWorldP2().distanceTo(rail.getWorldP3()))
-                * (rail.getRenderEnd() - rail.getRenderStart());
+        double controlLength = getControlLength(rail) * (rail.getRenderEnd() - rail.getRenderStart());
         return Math.max(24, Math.min(256, (int) Math.ceil(controlLength * 10.0)));
+    }
+
+    private double getControlLength(GrindRailBlockEntity rail) {
+        return rail.getWorldP0().distanceTo(rail.getWorldP1())
+                + rail.getWorldP1().distanceTo(rail.getWorldP2())
+                + rail.getWorldP2().distanceTo(rail.getWorldP3());
     }
 
     private Vec3[][] buildSections(GrindRailBlockEntity rail, int segments) {
@@ -130,15 +147,16 @@ public class GrindRailRenderer implements BlockEntityRenderer<GrindRailBlockEnti
             Vec3 d,
             float u0,
             float u1,
+            float[] v,
             int packedLight,
             int packedOverlay
     ) {
         Vec3 normal = c.subtract(a).cross(b.subtract(a));
         normal = normal.lengthSqr() < 1.0E-6 ? WORLD_UP : normal.normalize();
-        addVertex(buffer, pose, a, u0, 0.0f, normal, packedLight, packedOverlay);
-        addVertex(buffer, pose, d, u1, 0.0f, normal, packedLight, packedOverlay);
-        addVertex(buffer, pose, c, u1, 1.0f, normal, packedLight, packedOverlay);
-        addVertex(buffer, pose, b, u0, 1.0f, normal, packedLight, packedOverlay);
+        addVertex(buffer, pose, a, u0, v[0], normal, packedLight, packedOverlay);
+        addVertex(buffer, pose, d, u1, v[0], normal, packedLight, packedOverlay);
+        addVertex(buffer, pose, c, u1, v[1], normal, packedLight, packedOverlay);
+        addVertex(buffer, pose, b, u0, v[1], normal, packedLight, packedOverlay);
     }
 
     private void addVertex(

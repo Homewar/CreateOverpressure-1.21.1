@@ -145,6 +145,7 @@ public class DeviderBlock extends BaseEntityBlock implements IWrenchable {
         boolean powered = level.hasNeighborSignal(pos);
         if (state.getValue(POWERED) != powered) {
             level.setBlock(pos, state.setValue(POWERED, powered), Block.UPDATE_CLIENTS);
+            PneumaticTubeBlockEntity.invalidateTransportTopologyAt(level, pos);
         }
 
         super.neighborChanged(state, level, pos, neighborBlock, neighborPos, movedByPiston);

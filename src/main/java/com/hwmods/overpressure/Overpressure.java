@@ -21,6 +21,7 @@ public class Overpressure {
         LegacyRegistryAliases.register();
         ModBlocks.register(modBus);
         ModBlockEntities.BLOCK_ENTITIES.register(modBus);
+        ModSoundEvents.SOUND_EVENTS.register(modBus);
         modBus.addListener(this::commonSetup);
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
     }

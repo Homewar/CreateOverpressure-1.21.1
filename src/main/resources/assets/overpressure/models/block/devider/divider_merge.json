@@ -1,0 +1,10 @@
+{
+  "parent": "overpressure:block/devider/divider",
+  "textures": {
+    "4": "overpressure:block/devider/45_degree_pipe_branch",
+    "5": "overpressure:block/devider/core",
+    "7": "overpressure:block/devider/45_degree_pipe_branch",
+    "8": "overpressure:block/devider/straight_pipe_down",
+    "particle": "overpressure:block/devider/core"
+  }
+}

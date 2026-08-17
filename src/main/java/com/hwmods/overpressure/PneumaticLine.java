@@ -50,10 +50,11 @@ public final class PneumaticLine {
                 return false;
             }
             if (devider.isStraightPosition(to)) {
-                return toBlockEntity instanceof PneumaticTubeBlockEntity
-                        || toBlockEntity instanceof ItemPumpBlockEntity;
+                return devider.getJunctionRole() == DeviderBlockEntity.JunctionRole.MERGER
+                        && (toBlockEntity instanceof PneumaticTubeBlockEntity
+                        || toBlockEntity instanceof ItemPumpBlockEntity);
             }
-            return devider.isBranchPositionEnabled(to)
+            return devider.isBranchOutputEnabled(to)
                     && level.getBlockState(to).getBlock() instanceof CurvaturePneumaticTubeBlock
                     && toBlockEntity instanceof PneumaticTubeBlockEntity;
         }
@@ -64,10 +65,11 @@ public final class PneumaticLine {
                 return false;
             }
             if (devider.isStraightPosition(from)) {
-                return fromBlockEntity instanceof PneumaticTubeBlockEntity
-                        || fromBlockEntity instanceof ItemPumpBlockEntity;
+                return devider.getJunctionRole() == DeviderBlockEntity.JunctionRole.DIVIDER
+                        && (fromBlockEntity instanceof PneumaticTubeBlockEntity
+                        || fromBlockEntity instanceof ItemPumpBlockEntity);
             }
-            return devider.isBranchPositionEnabled(from)
+            return devider.isBranchInputEnabled(from)
                     && level.getBlockState(from).getBlock() instanceof CurvaturePneumaticTubeBlock
                     && fromBlockEntity instanceof PneumaticTubeBlockEntity;
         }

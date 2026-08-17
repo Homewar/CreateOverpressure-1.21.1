@@ -1,7 +1,7 @@
 {
   "variants": {
     "": {
-      "model": "overpressure:block/grind_rail"
+      "model": "overpressure:block/grind_rails/grind_rail_only"
     }
   }
 }

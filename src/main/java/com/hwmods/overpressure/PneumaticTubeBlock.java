@@ -54,6 +54,7 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
     public static final BooleanProperty DOWN = BlockStateProperties.DOWN;
     public static final BooleanProperty WATERLOGGED = BlockStateProperties.WATERLOGGED;
     public static final BooleanProperty HAS_RIM = BooleanProperty.create("has_rim");
+    public static final BooleanProperty HAS_SECOND_RIM = BooleanProperty.create("has_second_rim");
     public static final BooleanProperty HAS_CONNECTION = BooleanProperty.create("has_connection");
     public static final DirectionProperty RIM = DirectionProperty.create("rim");
     private static final VoxelShape CORE_SHAPE = Block.box(4, 4, 4, 12, 12, 12);
@@ -79,6 +80,7 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
                 .setValue(DOWN, false)
                 .setValue(WATERLOGGED, false)
                 .setValue(HAS_RIM, false)
+                .setValue(HAS_SECOND_RIM, false)
                 .setValue(HAS_CONNECTION, false)
                 .setValue(RIM, Direction.NORTH);
     }
@@ -245,13 +247,7 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
             return configureEncasedEnd(state, connectedDirections);
         }
 
-        if (shouldAddRandomRim(pos) && !connectedDirections.isEmpty()) {
-            state = state
-                    .setValue(HAS_RIM, true)
-                    .setValue(RIM, connectedDirections.get(level.random.nextInt(connectedDirections.size())));
-        }
-
-        return preferCurvatureRim(level, pos, state);
+        return applyPreferredRim(level, pos, state);
     }
 
     @Override
@@ -276,17 +272,7 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
             return configureEncasedEnd(newState, getConnectedDirections(newState));
         }
 
-        if (newState.getValue(HAS_RIM) && !newState.getValue(getConnectionProperty(newState.getValue(RIM)))) {
-            List<Direction> connectedDirections = getConnectedDirections(newState);
-
-            if (connectedDirections.isEmpty()) {
-                return newState.setValue(HAS_RIM, false).setValue(RIM, Direction.NORTH);
-            }
-
-            return newState.setValue(RIM, connectedDirections.get(0));
-        }
-
-        return preferCurvatureRim(level, pos, newState);
+        return applyPreferredRim(level, pos, newState);
     }
 
     @Override
@@ -300,6 +286,7 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
                 DOWN,
                 WATERLOGGED,
                 HAS_RIM,
+                HAS_SECOND_RIM,
                 HAS_CONNECTION,
                 RIM
         );
@@ -343,6 +330,7 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
         to = to
                 .setValue(WATERLOGGED, from.getValue(WATERLOGGED))
                 .setValue(HAS_RIM, from.getValue(HAS_RIM))
+                .setValue(HAS_SECOND_RIM, from.getValue(HAS_SECOND_RIM))
                 .setValue(HAS_CONNECTION, from.getValue(HAS_CONNECTION))
                 .setValue(RIM, from.getValue(RIM));
 
@@ -353,16 +341,15 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
 
     private static BlockState configureEncasedEnd(BlockState state, List<Direction> connectedDirections) {
         if (connectedDirections.size() != 1) {
-            return state.setValue(HAS_RIM, false);
+            return state
+                    .setValue(HAS_RIM, false)
+                    .setValue(HAS_SECOND_RIM, false);
         }
 
         return state
                 .setValue(HAS_RIM, true)
+                .setValue(HAS_SECOND_RIM, false)
                 .setValue(RIM, connectedDirections.get(0).getOpposite());
-    }
-
-    private boolean shouldAddRandomRim(BlockPos pos) {
-        return Math.floorMod(pos.getX() + pos.getY() + pos.getZ(), 3) == 0;
     }
 
     private static List<Direction> getConnectedDirections(BlockState state) {
@@ -475,14 +462,64 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
         };
     }
 
-    protected BlockState preferCurvatureRim(net.minecraft.world.level.BlockGetter level, BlockPos pos, BlockState state) {
+    /**
+     * Gives functional tube endpoints priority when choosing the primary rim,
+     * while still preserving an opposite rim at a curvature joint.
+     * This is also used by planned sections, whose block states are assembled
+     * before they are placed in the world.
+     */
+    BlockState applyPreferredRim(BlockGetter level, BlockPos pos, BlockState state) {
+        List<Direction> functionalDirections = new ArrayList<>(2);
+        List<Direction> curvatureDirections = new ArrayList<>(2);
+
         for (Direction direction : getConnectedDirections(state)) {
+            if (isConnectedFunctionalDevice(level, pos, state, direction)) {
+                functionalDirections.add(direction);
+            }
             if (isConnectedCurvature(level, pos, state, direction)) {
-                return state.setValue(HAS_RIM, true).setValue(RIM, direction);
+                curvatureDirections.add(direction);
             }
         }
 
-        return state;
+        if (!functionalDirections.isEmpty()) {
+            Direction primaryRim = functionalDirections.get(0);
+            Direction oppositeRim = primaryRim.getOpposite();
+            boolean hasOppositeRim = functionalDirections.contains(oppositeRim)
+                    || curvatureDirections.contains(oppositeRim);
+            return state
+                    .setValue(HAS_RIM, true)
+                    .setValue(HAS_SECOND_RIM, hasOppositeRim)
+                    .setValue(RIM, primaryRim);
+        }
+
+        if (!curvatureDirections.isEmpty()) {
+            Direction primaryRim = curvatureDirections.get(0);
+            return state
+                    .setValue(HAS_RIM, true)
+                    .setValue(HAS_SECOND_RIM, curvatureDirections.contains(primaryRim.getOpposite()))
+                    .setValue(RIM, primaryRim);
+        }
+
+        return state
+                .setValue(HAS_RIM, false)
+                .setValue(HAS_SECOND_RIM, false)
+                .setValue(RIM, Direction.NORTH);
+    }
+
+    private boolean isConnectedFunctionalDevice(
+            BlockGetter level,
+            BlockPos pos,
+            BlockState state,
+            Direction direction
+    ) {
+        if (!state.getValue(getConnectionProperty(direction))) {
+            return false;
+        }
+
+        Block neighborBlock = level.getBlockState(pos.relative(direction)).getBlock();
+        return neighborBlock instanceof PneumaticConnectionBlock
+                || neighborBlock instanceof ValveBlock
+                || neighborBlock instanceof ClogSensorBlock;
     }
 
     private boolean isConnectedCurvature(

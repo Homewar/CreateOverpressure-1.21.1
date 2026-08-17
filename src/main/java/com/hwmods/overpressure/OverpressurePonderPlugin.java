@@ -149,6 +149,7 @@ public class OverpressurePonderPlugin implements PonderPlugin {
                     .setValue(PneumaticTubeBlock.EAST, true)
                     .setValue(PneumaticTubeBlock.WEST, true)
                     .setValue(PneumaticTubeBlock.HAS_RIM, false)
+                    .setValue(PneumaticTubeBlock.HAS_SECOND_RIM, false)
                     .setValue(PneumaticTubeBlock.RIM, Direction.WEST);
             BlockState pumpState = ModBlocks.ITEM_PUMP.get().defaultBlockState()
                     .setValue(BlockStateProperties.FACING, Direction.WEST);

@@ -1,0 +1,20 @@
+{
+  "grind_collide": {
+    "subtitle": "subtitles.overpressure.grind_collide",
+    "sounds": [
+      "overpressure:grind_rails/grind_collide"
+    ]
+  },
+  "grind_fast_loop": {
+    "subtitle": "subtitles.overpressure.grind_fast_loop",
+    "sounds": [
+      "overpressure:grind_rails/grind_fast_loop"
+    ]
+  },
+  "grind_slow_loop": {
+    "subtitle": "subtitles.overpressure.grind_slow_loop",
+    "sounds": [
+      "overpressure:grind_rails/grind_slow_loop"
+    ]
+  }
+}

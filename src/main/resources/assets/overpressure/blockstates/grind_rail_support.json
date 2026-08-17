@@ -1,0 +1,12 @@
+{
+  "variants": {
+    "connected=false,facing=north": {"model": "overpressure:block/grind_rails/grind_rail_with_fastening"},
+    "connected=false,facing=east": {"model": "overpressure:block/grind_rails/grind_rail_with_fastening", "y": 90},
+    "connected=false,facing=south": {"model": "overpressure:block/grind_rails/grind_rail_with_fastening", "y": 180},
+    "connected=false,facing=west": {"model": "overpressure:block/grind_rails/grind_rail_with_fastening", "y": 270},
+    "connected=true,facing=north": {"model": "overpressure:block/grind_rails/grind_rail_with_fastening"},
+    "connected=true,facing=east": {"model": "overpressure:block/grind_rails/grind_rail_with_fastening", "y": 90},
+    "connected=true,facing=south": {"model": "overpressure:block/grind_rails/grind_rail_with_fastening", "y": 180},
+    "connected=true,facing=west": {"model": "overpressure:block/grind_rails/grind_rail_with_fastening", "y": 270}
+  }
+}

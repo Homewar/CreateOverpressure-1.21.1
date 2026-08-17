@@ -10,6 +10,7 @@ import java.util.UUID;
 
 import javax.annotation.Nullable;
 
+import com.hwmods.overpressure.math.CubicBezier;
 import com.simibubi.create.content.equipment.extendoGrip.ExtendoGripItem;
 import com.simibubi.create.infrastructure.config.AllConfigs;
 
@@ -307,7 +308,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
                 return false;
             }
 
-            BezierData curve = createFullBezierCurve(start, startPos, endPos, endTravelDirection);
+            CubicBezier curve = createFullBezierCurve(start, startPos, endPos, endTravelDirection);
 
             if (!start.isDeviderOutput() && !isCurveSmoothEnough(curve)) {
                 player.displayClientMessage(Component.literal("Tube curve is too sharp"), true);
@@ -338,6 +339,10 @@ public class PneumaticTubeBlockItem extends BlockItem {
                         PneumaticTubeBlock.WATERLOGGED,
                         level.getFluidState(tube.pos).is(Fluids.WATER)
                 );
+            }
+
+            if (state.getBlock() instanceof PneumaticTubeBlock tubeBlock) {
+                state = tubeBlock.applyPreferredRim(level, tube.pos, state);
             }
 
             level.setBlock(tube.pos, state, Block.UPDATE_ALL);
@@ -377,7 +382,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
             return List.of();
         }
 
-        BezierData fullCurve = createFullBezierCurve(start, startPos, endPos, secondLegDirection);
+        CubicBezier fullCurve = createFullBezierCurve(start, startPos, endPos, secondLegDirection);
         List<BlockPos> curvePositions = start.isDeviderOutput()
                 ? List.of()
                 : buildRightAnglePathPositions(startPos, endPos, firstLegDirection, secondLegDirection);
@@ -396,10 +401,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
             return List.of();
         }
 
-        List<BezierData> curveSegments = splitBezierByCount(
-                fullCurve,
-                curvePositions.size()
-        );
+        List<CubicBezier> curveSegments = fullCurve.splitEqually(curvePositions.size());
 
         List<PlacedTube> tubes = new ArrayList<>();
 
@@ -421,7 +423,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
                     previousDirection == null
                             ? createTubeState(true, nextDirection)
                             : createTubeState(true, previousDirection, nextDirection),
-                    offsetBezier(curveSegments.get(i), Vec3.atLowerCornerOf(current))
+                    curveSegments.get(i).offset(Vec3.atLowerCornerOf(current))
             ));
         }
 
@@ -510,6 +512,9 @@ public class PneumaticTubeBlockItem extends BlockItem {
         if (state.hasProperty(PneumaticTubeBlock.HAS_RIM)) {
             state = state.setValue(PneumaticTubeBlock.HAS_RIM, false);
         }
+        if (state.hasProperty(PneumaticTubeBlock.HAS_SECOND_RIM)) {
+            state = state.setValue(PneumaticTubeBlock.HAS_SECOND_RIM, false);
+        }
         if (state.hasProperty(PneumaticTubeBlock.RIM)) {
             state = state.setValue(PneumaticTubeBlock.RIM, Direction.NORTH);
         }
@@ -524,15 +529,23 @@ public class PneumaticTubeBlockItem extends BlockItem {
         return state.setValue(PneumaticTubeBlock.HAS_CONNECTION, connections.length > 0);
     }
 
-    private List<BlockPos> buildCurvePathPositions(BlockPos startPos, BlockPos endPos, BezierData renderCurve, Direction.Axis fixedAxis) {
+    private List<BlockPos> buildCurvePathPositions(
+            BlockPos startPos,
+            BlockPos endPos,
+            CubicBezier renderCurve,
+            Direction.Axis fixedAxis
+    ) {
         List<BlockPos> positions = new ArrayList<>();
-        BezierData centerCurve = centerCurveFromRenderCurve(renderCurve);
-        int samples = Math.max(MIN_CURVE_SAMPLES, (int) Math.ceil(renderCurve.p0.distanceTo(renderCurve.p3) * CURVE_SAMPLES_PER_BLOCK));
+        CubicBezier centerCurve = renderCurve.toBlockCenterCurve();
+        int samples = Math.max(
+                MIN_CURVE_SAMPLES,
+                (int) Math.ceil(renderCurve.p0().distanceTo(renderCurve.p3()) * CURVE_SAMPLES_PER_BLOCK)
+        );
 
         positions.add(startPos);
 
         for (int i = 1; i < samples; i++) {
-            Vec3 point = getBezierPoint(centerCurve, (double) i / samples);
+            Vec3 point = centerCurve.pointAt((double) i / samples);
             BlockPos sampled = BlockPos.containing(point.x, point.y, point.z);
             appendAdjacentPath(positions, clampToPlane(sampled, startPos, fixedAxis), fixedAxis);
         }
@@ -608,7 +621,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
         };
     }
 
-    private BezierData createFullBezierCurve(
+    private CubicBezier createFullBezierCurve(
             CurveStart start,
             BlockPos startPos,
             BlockPos endPos,
@@ -640,120 +653,15 @@ public class PneumaticTubeBlockItem extends BlockItem {
         Vec3 p1 = p0.add(incoming.scale(handleLength));
         Vec3 p2 = p3.subtract(outgoing.scale(handleLength));
 
-        return new BezierData(p0, p1, p2, p3);
+        return new CubicBezier(p0, p1, p2, p3);
     }
 
-    private List<BezierData> splitBezierByCount(BezierData curve, int count) {
-        List<BezierData> segments = new ArrayList<>();
-        BezierData remaining = curve;
-
-        for (int i = 0; i < count - 1; i++) {
-            double t = 1.0 / (count - i);
-            BezierSplit split = splitBezier(remaining, t);
-            segments.add(split.left);
-            remaining = split.right;
-        }
-
-        segments.add(remaining);
-        return segments;
-    }
-
-    private BezierSplit splitBezier(BezierData curve, double t) {
-        Vec3 p01 = lerp(curve.p0, curve.p1, t);
-        Vec3 p12 = lerp(curve.p1, curve.p2, t);
-        Vec3 p23 = lerp(curve.p2, curve.p3, t);
-        Vec3 p012 = lerp(p01, p12, t);
-        Vec3 p123 = lerp(p12, p23, t);
-        Vec3 p0123 = lerp(p012, p123, t);
-
-        return new BezierSplit(
-                new BezierData(curve.p0, p01, p012, p0123),
-                new BezierData(p0123, p123, p23, curve.p3)
+    private boolean isCurveSmoothEnough(CubicBezier curve) {
+        return curve.satisfiesCurvatureLimits(
+                CURVATURE_CHECK_SAMPLES,
+                MIN_CURVATURE_RADIUS,
+                MAX_SECOND_DERIVATIVE
         );
-    }
-
-    private BezierData offsetBezier(BezierData curve, Vec3 offset) {
-        return new BezierData(
-                curve.p0.subtract(offset),
-                curve.p1.subtract(offset),
-                curve.p2.subtract(offset),
-                curve.p3.subtract(offset)
-        );
-    }
-
-    private Vec3 lerp(Vec3 a, Vec3 b, double t) {
-        return a.scale(1.0 - t).add(b.scale(t));
-    }
-
-    private BezierData centerCurveFromRenderCurve(BezierData curve) {
-        Vec3 startTangent = curve.p1.subtract(curve.p0);
-        Vec3 endTangent = curve.p3.subtract(curve.p2);
-
-        if (startTangent.lengthSqr() > 1.0E-6) {
-            startTangent = startTangent.normalize().scale(0.5);
-        }
-
-        if (endTangent.lengthSqr() > 1.0E-6) {
-            endTangent = endTangent.normalize().scale(0.5);
-        }
-
-        Vec3 p0 = curve.p0.add(startTangent);
-        Vec3 p3 = curve.p3.subtract(endTangent);
-        Vec3 p1 = curve.p1.add(startTangent);
-        Vec3 p2 = curve.p2.subtract(endTangent);
-
-        return new BezierData(p0, p1, p2, p3);
-    }
-
-    private Vec3 getBezierPoint(BezierData curve, double t) {
-        double u = 1.0 - t;
-        double uu = u * u;
-        double tt = t * t;
-
-        return curve.p0.scale(uu * u)
-                .add(curve.p1.scale(3.0 * uu * t))
-                .add(curve.p2.scale(3.0 * u * tt))
-                .add(curve.p3.scale(tt * t));
-    }
-
-    private Vec3 getBezierDerivative(BezierData curve, double t) {
-        double u = 1.0 - t;
-
-        return curve.p1.subtract(curve.p0).scale(3.0 * u * u)
-                .add(curve.p2.subtract(curve.p1).scale(6.0 * u * t))
-                .add(curve.p3.subtract(curve.p2).scale(3.0 * t * t));
-    }
-
-    private Vec3 getBezierSecondDerivative(BezierData curve, double t) {
-        double u = 1.0 - t;
-
-        return curve.p2.subtract(curve.p1.scale(2.0)).add(curve.p0).scale(6.0 * u)
-                .add(curve.p3.subtract(curve.p2.scale(2.0)).add(curve.p1).scale(6.0 * t));
-    }
-
-    private boolean isCurveSmoothEnough(BezierData curve) {
-        for (int i = 0; i <= CURVATURE_CHECK_SAMPLES; i++) {
-            double t = (double) i / CURVATURE_CHECK_SAMPLES;
-            Vec3 derivative = getBezierDerivative(curve, t);
-            Vec3 secondDerivative = getBezierSecondDerivative(curve, t);
-            double speedSquared = derivative.lengthSqr();
-
-            if (secondDerivative.length() > MAX_SECOND_DERIVATIVE) {
-                return false;
-            }
-
-            if (speedSquared <= 1.0E-8) {
-                return false;
-            }
-
-            double curvature = derivative.cross(secondDerivative).length() / Math.pow(speedSquared, 1.5);
-
-            if (curvature > 0.0 && 1.0 / curvature < MIN_CURVATURE_RADIUS) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     private void applyBezierCurve(Level level, PlacedTube tube, UUID sectionId) {
@@ -765,7 +673,12 @@ public class PneumaticTubeBlockItem extends BlockItem {
 
         if (blockEntity instanceof CurvaturePneumaticTubeEntity curvatureTube) {
             curvatureTube.setSectionId(sectionId);
-            curvatureTube.setCurve(tube.bezier.p0, tube.bezier.p1, tube.bezier.p2, tube.bezier.p3);
+            curvatureTube.setCurve(
+                    tube.bezier.p0(),
+                    tube.bezier.p1(),
+                    tube.bezier.p2(),
+                    tube.bezier.p3()
+            );
         }
     }
 
@@ -983,13 +896,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
         return null;
     }
 
-    private record BezierData(Vec3 p0, Vec3 p1, Vec3 p2, Vec3 p3) {
-    }
-
-    private record BezierSplit(BezierData left, BezierData right) {
-    }
-
-    private record PlacedTube(BlockPos pos, BlockState state, @Nullable BezierData bezier) {
+    private record PlacedTube(BlockPos pos, BlockState state, @Nullable CubicBezier bezier) {
     }
 
     public record CurveStart(BlockPos pos, Direction direction, @Nullable Direction deviderSide) {
@@ -1112,7 +1019,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
                 return new PlanResult(List.of(), "Tube curve endpoints must face inside one plane");
             }
 
-            BezierData curve = createFullBezierCurve(start, startPos, endPos, endTravelDirection);
+            CubicBezier curve = createFullBezierCurve(start, startPos, endPos, endTravelDirection);
 
             if (!start.isDeviderOutput() && !isCurveSmoothEnough(curve)) {
                 return new PlanResult(List.of(), "Tube curve is too sharp");
@@ -1130,13 +1037,18 @@ public class PneumaticTubeBlockItem extends BlockItem {
         List<PlanTube> plan = new ArrayList<>();
 
         for (PlacedTube tube : tubes) {
+            BlockState state = tube.state;
+            if (state.getBlock() instanceof PneumaticTubeBlock tubeBlock) {
+                state = tubeBlock.applyPreferredRim(level, tube.pos, state);
+            }
+
             plan.add(new PlanTube(
                     tube.pos,
-                    tube.state,
-                    tube.bezier == null ? null : tube.bezier.p0,
-                    tube.bezier == null ? null : tube.bezier.p1,
-                    tube.bezier == null ? null : tube.bezier.p2,
-                    tube.bezier == null ? null : tube.bezier.p3
+                    state,
+                    tube.bezier == null ? null : tube.bezier.p0(),
+                    tube.bezier == null ? null : tube.bezier.p1(),
+                    tube.bezier == null ? null : tube.bezier.p2(),
+                    tube.bezier == null ? null : tube.bezier.p3()
             ));
         }
 

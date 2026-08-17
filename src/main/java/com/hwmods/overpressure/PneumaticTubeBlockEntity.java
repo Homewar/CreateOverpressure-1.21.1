@@ -52,6 +52,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
     private static class ClientMotion {
         private final List<BlockPos> path;
         private final List<Integer> ownerPathIndexes;
+        private final List<BlockPos> reservedMergerPassages;
         private int authoritativeOwnerOrdinal;
         private BlockPos authoritativeOwner;
         private float routeProgress;
@@ -73,6 +74,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         ) {
             path = List.copyOf(item.path);
             this.ownerPathIndexes = List.copyOf(ownerPathIndexes);
+            reservedMergerPassages = List.copyOf(item.reservedMergerPassages);
             authoritativeOwnerOrdinal = ownerOrdinal;
             authoritativeOwner = owner.immutable();
             routeProgress = ownerOrdinal + item.segmentProgress;
@@ -180,6 +182,8 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         movingItem = new MovingTubeItem(stack, path.tubePositions(), path.targetConnector());
         movingItem.sourceConnector = sourceConnector == null ? null : sourceConnector.immutable();
         movingItem.spillsAtEnd = path.spillsAtEnd();
+        movingItem.protectedFromJunctionSpill = containsMergerPassage(level, path.tubePositions());
+        movingItem.reservedMergerPassages = findConfiguredMergerPassages(level, path.tubePositions());
         movingItem.startPathIndex = pathIndex;
         movingItem.pathIndex = pathIndex;
         movingItem.speedControllers = speedControllers;
@@ -361,12 +365,12 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
                 continue;
             }
 
-            TubePath alternatePath = TubeNetworkPathfinder.findPathToInsertConnector(
+            TubePath alternatePath = TubeNetworkPathfinder.findPathFromOccupiedTube(
                     level,
                     worldPosition,
                     alternateOutput
             );
-            if (alternatePath.isEmpty()) {
+            if (alternatePath.isEmpty() || alternatePath.spillsAtEnd()) {
                 continue;
             }
 
@@ -375,6 +379,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
             );
             reroutedPath.addAll(alternatePath.tubePositions());
             movingItem.path = reroutedPath;
+            updateReservedMergerPassages(level, movingItem, reroutedPath);
             movingItem.targetConnector = alternatePath.targetConnector();
             movingItem.spillsAtEnd = alternatePath.spillsAtEnd();
             movingItem.speedControllers = findSpeedControllers(reroutedPath);
@@ -382,7 +387,6 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
             movingItem.transportTopologyVersion = getTransportTopologyVersion(level);
             movingItem.lastSpeedCheckGameTime = Long.MIN_VALUE;
             movingItem.segmentDuration = calculateSegmentDuration(movingItem, movingItem.pathIndex);
-            movingItem.waitingForNextTube = false;
             movingItem.waitingAtDestination = false;
             setChanged();
             syncMovingItem(level);
@@ -564,6 +568,11 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
                 return;
             }
 
+            if (pathContainsRedstoneMerger(level)) {
+                holdMovingItemForRoute(level);
+                return;
+            }
+
             if (level.getBlockState(movingItem.targetConnector).isAir()) {
                 ejectMovingItem(level, getOpenEndPosition(movingItem.targetConnector));
                 return;
@@ -608,6 +617,67 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         }
     }
 
+    private boolean pathContainsRedstoneMerger(Level level) {
+        if (movingItem.protectedFromJunctionSpill) {
+            return true;
+        }
+
+        movingItem.protectedFromJunctionSpill = containsMergerPassage(level, movingItem.path);
+        return movingItem.protectedFromJunctionSpill;
+    }
+
+    private static boolean containsMergerPassage(Level level, List<BlockPos> path) {
+        for (int index = 1; index + 1 < path.size(); index++) {
+            if (level.getBlockEntity(path.get(index)) instanceof DeviderBlockEntity devider
+                    && devider.isMergerPassage(path.get(index - 1), path.get(index + 1))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static List<BlockPos> findConfiguredMergerPassages(Level level, List<BlockPos> path) {
+        List<BlockPos> passages = new java.util.ArrayList<>();
+        for (int index = 1; index + 1 < path.size(); index++) {
+            BlockPos junctionPos = path.get(index);
+            if (level.getBlockEntity(junctionPos) instanceof DeviderBlockEntity devider
+                    && devider.getJunctionRole() == DeviderBlockEntity.JunctionRole.MERGER
+                    && devider.isMergerPassage(path.get(index - 1), path.get(index + 1))) {
+                passages.add(junctionPos.immutable());
+            }
+        }
+        return List.copyOf(passages);
+    }
+
+    private static void updateReservedMergerPassages(
+            Level level,
+            MovingTubeItem item,
+            List<BlockPos> path
+    ) {
+        List<BlockPos> passages = new java.util.ArrayList<>();
+        for (BlockPos reserved : item.reservedMergerPassages) {
+            if (path.contains(reserved)) {
+                passages.add(reserved);
+            }
+        }
+        for (BlockPos configured : findConfiguredMergerPassages(level, path)) {
+            if (!passages.contains(configured)) {
+                passages.add(configured);
+            }
+        }
+        item.reservedMergerPassages = List.copyOf(passages);
+    }
+
+    private void holdMovingItemForRoute(Level level) {
+        boolean stateChanged = !movingItem.waitingAtDestination || movingItem.waitingForNextTube;
+        movingItem.waitingAtDestination = true;
+        movingItem.waitingForNextTube = false;
+        if (stateChanged) {
+            setChanged();
+            syncMovingItem(level);
+        }
+    }
+
     private boolean isRestoredInsertConnector(Level level) {
         BlockEntity targetBlockEntity = level.getBlockEntity(movingItem.targetConnector);
         if (!(targetBlockEntity instanceof PneumaticConnectionBlockEntity)
@@ -644,6 +714,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         );
         restoredPath.addAll(extension.tubePositions());
         movingItem.path = restoredPath;
+        updateReservedMergerPassages(level, movingItem, restoredPath);
         movingItem.targetConnector = extension.targetConnector();
         movingItem.spillsAtEnd = extension.spillsAtEnd();
         movingItem.speedControllers = findSpeedControllers(restoredPath);
@@ -694,10 +765,24 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
 
         BlockPos currentPos = movingItem.path.get(currentPathIndex);
         BlockPos nextPos = movingItem.path.get(nextPathIndex);
-        if (level.getBlockEntity(currentPos) instanceof DeviderBlockEntity devider
-                && currentPathIndex > 0
-                && devider.isBranchPosition(movingItem.path.get(currentPathIndex - 1))
-                && !devider.isBranchPositionEnabled(movingItem.path.get(currentPathIndex - 1))) {
+        boolean finishingExistingMergerPassage = false;
+        if (level.getBlockEntity(currentPos) instanceof DeviderBlockEntity devider) {
+            BlockPos previousPos = currentPathIndex > 0
+                    ? movingItem.path.get(currentPathIndex - 1)
+                    : movingItem.sourceConnector;
+            finishingExistingMergerPassage = isReservedMergerPassage(
+                    level,
+                    movingItem.path,
+                    movingItem.reservedMergerPassages,
+                    currentPathIndex
+            );
+            if (!finishingExistingMergerPassage
+                    && !devider.getForwardPositions(previousPos).contains(nextPos)) {
+                return false;
+            }
+        }
+        if (level.getBlockEntity(nextPos) instanceof DeviderBlockEntity devider
+                && devider.getForwardPositions(currentPos).isEmpty()) {
             return false;
         }
         if (level.getBlockEntity(nextPos) instanceof DeviderBlockEntity devider
@@ -705,7 +790,8 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
                 && !devider.canMergeFrom(level, currentPos)) {
             return false;
         }
-        if (!canMoveBetween(currentPos, nextPos)) {
+        if (!canMoveBetween(currentPos, nextPos)
+                && !finishingExistingMergerPassage) {
             return false;
         }
 
@@ -715,11 +801,39 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
 
         BlockPos afterPumpPos = movingItem.path.get(nextPathIndex);
         if (level.getBlockEntity(afterPumpPos) instanceof DeviderBlockEntity devider
+                && devider.getForwardPositions(nextPos).isEmpty()) {
+            return false;
+        }
+        if (level.getBlockEntity(afterPumpPos) instanceof DeviderBlockEntity devider
                 && devider.isBranchPosition(nextPos)
                 && !devider.canMergeFrom(level, nextPos)) {
             return false;
         }
         return canMoveBetween(nextPos, afterPumpPos);
+    }
+
+    private static boolean isMergerPassage(Level level, List<BlockPos> path, int dividerPathIndex) {
+        if (dividerPathIndex <= 0 || dividerPathIndex + 1 >= path.size()) {
+            return false;
+        }
+
+        return level.getBlockEntity(path.get(dividerPathIndex)) instanceof DeviderBlockEntity devider
+                && devider.isMergerPassage(
+                path.get(dividerPathIndex - 1),
+                path.get(dividerPathIndex + 1)
+        );
+    }
+
+    private static boolean isReservedMergerPassage(
+            Level level,
+            List<BlockPos> path,
+            List<BlockPos> reservedPassages,
+            int dividerPathIndex
+    ) {
+        return dividerPathIndex >= 0
+                && dividerPathIndex < path.size()
+                && reservedPassages.contains(path.get(dividerPathIndex))
+                && isMergerPassage(level, path, dividerPathIndex);
     }
 
     public MovingTubeItem getMovingItem() {
@@ -971,7 +1085,14 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         motion.lastSegmentDurationCheck = Long.MIN_VALUE;
 
         for (int pathIndex = 0; pathIndex + 1 < motion.path.size(); pathIndex++) {
-            if (PneumaticLine.isTravelAllowed(level, motion.path.get(pathIndex), motion.path.get(pathIndex + 1))) {
+            boolean oldMergerPassageAfterRoleChange = isMergerPassageAfterRoleChange(
+                    level,
+                    motion.path,
+                    motion.reservedMergerPassages,
+                    pathIndex
+            );
+            if (PneumaticLine.isTravelAllowed(level, motion.path.get(pathIndex), motion.path.get(pathIndex + 1))
+                    || oldMergerPassageAfterRoleChange) {
                 continue;
             }
 
@@ -987,6 +1108,17 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
             break;
         }
         motion.topologyDirty = false;
+    }
+
+    private static boolean isMergerPassageAfterRoleChange(
+            Level level,
+            List<BlockPos> path,
+            List<BlockPos> reservedPassages,
+            int dividerPathIndex
+    ) {
+        return isReservedMergerPassage(level, path, reservedPassages, dividerPathIndex)
+                && level.getBlockEntity(path.get(dividerPathIndex)) instanceof DeviderBlockEntity devider
+                && devider.getJunctionRole() == DeviderBlockEntity.JunctionRole.DIVIDER;
     }
 
     private static int findOwnerOrdinalAtOrBefore(List<Integer> ownerPathIndexes, int pathIndex) {
@@ -1118,6 +1250,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         }
 
         movingItem.path = offsetPositions(movingItem.path, offset);
+        movingItem.reservedMergerPassages = offsetPositions(movingItem.reservedMergerPassages, offset);
         movingItem.speedControllers = List.of();
         movingItem.hasSpeedControllerCache = false;
         if (movingItem.sourceConnector != null) {
@@ -1157,6 +1290,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         movingTag.putLong("started_at", movingItem.startedAtGameTime);
         movingTag.putBoolean("waiting_for_next", movingItem.waitingForNextTube);
         movingTag.putBoolean("waiting_at_destination", movingItem.waitingAtDestination);
+        movingTag.putBoolean("protected_from_junction_spill", movingItem.protectedFromJunctionSpill);
 
         ListTag pathTag = new ListTag();
 
@@ -1165,6 +1299,12 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         }
 
         movingTag.put("path", pathTag);
+
+        ListTag reservedPassagesTag = new ListTag();
+        for (BlockPos passagePos : movingItem.reservedMergerPassages) {
+            reservedPassagesTag.add(saveBlockPos(passagePos));
+        }
+        movingTag.put("reserved_merger_passages", reservedPassagesTag);
         tag.put("moving_item", movingTag);
     }
 
@@ -1192,6 +1332,12 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         }
 
         MovingTubeItem item = new MovingTubeItem(stack, path, loadBlockPos(movingTag.getCompound("target")));
+        ListTag reservedPassagesTag = movingTag.getList("reserved_merger_passages", Tag.TAG_COMPOUND);
+        List<BlockPos> reservedPassages = new java.util.ArrayList<>();
+        for (int i = 0; i < reservedPassagesTag.size(); i++) {
+            reservedPassages.add(loadBlockPos(reservedPassagesTag.getCompound(i)));
+        }
+        item.reservedMergerPassages = List.copyOf(reservedPassages);
         item.sourceConnector = movingTag.contains("source", Tag.TAG_COMPOUND)
                 ? loadBlockPos(movingTag.getCompound("source"))
                 : null;
@@ -1214,6 +1360,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         item.startedAtGameTime = movingTag.getLong("started_at");
         item.waitingForNextTube = movingTag.getBoolean("waiting_for_next");
         item.waitingAtDestination = movingTag.getBoolean("waiting_at_destination");
+        item.protectedFromJunctionSpill = movingTag.getBoolean("protected_from_junction_spill");
         item.hasSpeedControllerCache = false;
         return item;
     }
@@ -1257,6 +1404,11 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         BlockEntity owner = level == null ? null : level.getBlockEntity(item.path.get(pathIndex));
         if (owner instanceof CurvaturePneumaticTubeEntity || owner instanceof DeviderBlockEntity) {
             return duration + fallbackMoveTime;
+        }
+
+        double curveIngressDistance = getCurveIngressDistance(item, pathIndex);
+        if (curveIngressDistance > 1.0E-6) {
+            duration += scaleMoveTime(fallbackMoveTime, curveIngressDistance);
         }
 
         int nextOwnerPathIndex = findNextOwnerPathIndex(item.path, pathIndex);
@@ -1326,6 +1478,17 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
             }
         }
 
+        double curveIngressDistance = getCurveIngressDistance(item, pathIndex);
+        if (curveIngressDistance > 1.0E-6) {
+            int curveIngressDuration = scaleMoveTime(fallbackMoveTime, curveIngressDistance);
+            if (elapsedTicks <= elapsedDuration + curveIngressDuration) {
+                double localProgress = (elapsedTicks - elapsedDuration) / curveIngressDuration;
+                return (float) ((traveledDistance + curveIngressDistance * localProgress) / totalDistance);
+            }
+            elapsedDuration += curveIngressDuration;
+            traveledDistance += curveIngressDistance;
+        }
+
         if (nextOwnerPathIndex > pathIndex) {
             for (int edgeIndex = pathIndex; edgeIndex < nextOwnerPathIndex; edgeIndex++) {
                 double edgeDistance = getPathEdgeDistance(item, edgeIndex);
@@ -1348,7 +1511,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
     }
 
     private double getSegmentDistance(MovingTubeItem item, int pathIndex, int nextOwnerPathIndex) {
-        double distance = 0.0;
+        double distance = getCurveIngressDistance(item, pathIndex);
         if (item.sourceConnector != null && pathIndex == item.startPathIndex) {
             distance += getSourceEntryDistance(item);
             for (int edgeIndex = 0; edgeIndex < pathIndex; edgeIndex++) {
@@ -1363,6 +1526,23 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
             return distance;
         }
         return distance + getTargetEdgeDistance(item, pathIndex);
+    }
+
+    private double getCurveIngressDistance(MovingTubeItem item, int pathIndex) {
+        if (level == null || item == null || pathIndex <= 0 || pathIndex >= item.path.size()) {
+            return 0.0;
+        }
+
+        BlockPos previousPos = item.path.get(pathIndex - 1);
+        if (!(level.getBlockEntity(previousPos) instanceof CurvaturePneumaticTubeEntity curvatureTube)) {
+            return 0.0;
+        }
+
+        Vec3 previousOrigin = Vec3.atLowerCornerOf(previousPos);
+        Vec3 p0 = previousOrigin.add(curvatureTube.getP0());
+        Vec3 p3 = previousOrigin.add(curvatureTube.getP3());
+        Vec3 currentCenter = Vec3.atCenterOf(item.path.get(pathIndex));
+        return Math.min(p0.distanceTo(currentCenter), p3.distanceTo(currentCenter));
     }
 
     private int getSegmentEdgeDuration(MovingTubeItem item, int edgeIndex, int fallbackMoveTime) {
