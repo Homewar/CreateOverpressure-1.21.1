@@ -26,6 +26,8 @@ public class MovingTubeItem {
     public long startedAtGameTime;
     public boolean waitingForNextTube;
     public boolean waitingAtDestination;
+    public boolean startsAtTubeOpenEnd;
+    public boolean endsAtTubeOpenEnd;
     public boolean protectedFromJunctionSpill;
     public boolean hasSpeedControllerCache;
     public long transportTopologyVersion;
@@ -50,6 +52,8 @@ public class MovingTubeItem {
         this.startedAtGameTime = 0L;
         this.waitingForNextTube = false;
         this.waitingAtDestination = false;
+        this.startsAtTubeOpenEnd = false;
+        this.endsAtTubeOpenEnd = false;
         this.protectedFromJunctionSpill = false;
         this.hasSpeedControllerCache = false;
         this.transportTopologyVersion = Long.MIN_VALUE;

@@ -157,7 +157,7 @@ public abstract class AbstractInlineTubeBlock extends BaseEntityBlock
     @Override
     protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
         if (!state.is(newState.getBlock())) {
-            PneumaticTubeBlockEntity.invalidateClientPathAt(level, pos);
+            PneumaticTubeBlockEntity.invalidateTransportTopologyAt(level, pos);
 
             if (!level.isClientSide && level.getBlockEntity(pos) instanceof PneumaticTubeBlockEntity tube) {
                 tube.ejectMovingItem(level, Vec3.atCenterOf(pos));

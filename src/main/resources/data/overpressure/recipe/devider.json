@@ -1,25 +1,22 @@
 {
   "type": "minecraft:crafting_shaped",
   "pattern": [
-    " R ",
-    "APA",
+    " P ",
+    "PKP",
     " G "
   ],
   "key": {
-    "R": {
-      "item": "minecraft:redstone_torch"
-    },
-    "A": {
-      "item": "create:andesite_alloy"
-    },
     "P": {
       "item": "overpressure:pneumatic_tube"
+    },
+    "K": {
+      "item": "create:brass_casing"
     },
     "G": {
       "item": "create:cogwheel"
     }
   },
   "result": {
-    "id": "overpressure:valve"
+    "id": "overpressure:devider"
   }
 }

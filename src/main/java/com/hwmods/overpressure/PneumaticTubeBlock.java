@@ -301,13 +301,13 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
     protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
         if (state.getBlock() instanceof PneumaticTubeBlock && newState.getBlock() instanceof PneumaticTubeBlock) {
             if (!state.is(newState.getBlock())) {
-                PneumaticTubeBlockEntity.invalidateClientPathAt(level, pos);
+                PneumaticTubeBlockEntity.invalidateTransportTopologyAt(level, pos);
             }
             return;
         }
 
         if (!state.is(newState.getBlock())) {
-            PneumaticTubeBlockEntity.invalidateClientPathAt(level, pos);
+            PneumaticTubeBlockEntity.invalidateTransportTopologyAt(level, pos);
         }
 
         if (!level.isClientSide && !state.is(newState.getBlock())

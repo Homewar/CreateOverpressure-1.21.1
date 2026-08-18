@@ -57,6 +57,10 @@ public class GrindRailBlockItem extends BlockItem {
                 context.getClickLocation(),
                 player.getDirection()
         );
+        if (!isSupportAnchor(context.getLevel(), target)) {
+            player.displayClientMessage(Component.translatable("overpressure.grind_rail.error.support_required"), true);
+            return context.getLevel().isClientSide ? InteractionResult.SUCCESS : InteractionResult.CONSUME;
+        }
         if (isOccupiedSupportEdge(context.getLevel(), target)) {
             player.displayClientMessage(Component.translatable("overpressure.grind_rail.error.edge_occupied"), true);
             return context.getLevel().isClientSide ? InteractionResult.SUCCESS : InteractionResult.CONSUME;
@@ -158,6 +162,9 @@ public class GrindRailBlockItem extends BlockItem {
     }
 
     public static RailPlan createPlan(Level level, RailAnchor start, RailAnchor end) {
+        if (!isSupportAnchor(level, start) || !isSupportAnchor(level, end)) {
+            return RailPlan.invalid("overpressure.grind_rail.error.support_required");
+        }
         if (isOccupiedSupportEdge(level, start) || isOccupiedSupportEdge(level, end)) {
             return RailPlan.invalid("overpressure.grind_rail.error.edge_occupied");
         }
@@ -228,8 +235,15 @@ public class GrindRailBlockItem extends BlockItem {
                 && rail.isEdgeOccupied(support.edge());
     }
 
+    private static boolean isSupportAnchor(Level level, RailAnchor anchor) {
+        RailEndpoint support = anchor.support();
+        return support != null
+                && level.getBlockState(support.pos()).getBlock() instanceof GrindRailSupportBlock;
+    }
+
     private static void connectSupport(Level level, @Nullable RailEndpoint endpoint, UUID sectionId) {
         if (endpoint != null
+                && level.getBlockState(endpoint.pos()).getBlock() instanceof GrindRailSupportBlock
                 && level.getBlockEntity(endpoint.pos()) instanceof GrindRailBlockEntity support) {
             support.connectEdge(endpoint.edge(), sectionId);
         }

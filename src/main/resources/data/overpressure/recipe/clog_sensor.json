@@ -1,16 +1,22 @@
 {
   "type": "minecraft:crafting_shaped",
   "pattern": [
-    " R ",
-    "RPR",
-    " R "
+    " E ",
+    "BPB",
+    " C "
   ],
   "key": {
-    "R": {
-      "item": "minecraft:redstone"
+    "E": {
+      "item": "create:electron_tube"
+    },
+    "B": {
+      "item": "create:brass_sheet"
     },
     "P": {
       "item": "overpressure:pneumatic_tube"
+    },
+    "C": {
+      "item": "minecraft:comparator"
     }
   },
   "result": {

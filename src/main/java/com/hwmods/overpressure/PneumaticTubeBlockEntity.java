@@ -16,6 +16,7 @@ import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import com.simibubi.create.foundation.utility.CreateLang;
 
+import net.createmod.ponder.api.level.PonderLevel;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -32,6 +33,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.phys.Vec3;
 
 public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveGoggleInformation {
@@ -44,6 +46,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
     private static final Map<Level, Map<Long, ClientMotion>> CLIENT_MOTIONS = new WeakHashMap<>();
     private static final Map<Level, Long> CLIENT_LAST_CLEANUP = new WeakHashMap<>();
     private static final Map<Level, Long> TRANSPORT_TOPOLOGY_VERSIONS = new WeakHashMap<>();
+    private static long ponderAnimationSequence = Long.MIN_VALUE;
     private MovingTubeItem movingItem;
 
     public record ClientRenderStep(int pathIndex, int nextOwnerPathIndex, float progress) {
@@ -286,6 +289,10 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         if (movingItem.waitingForNextTube) {
             tryRerouteDeviderOutput(level);
 
+            if (markBrokenNextSegmentAsSpill(level)) {
+                return;
+            }
+
             if (!hasRunningPump(movingItem)) {
                 return;
             }
@@ -316,14 +323,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
 
         if (isApproachingBrokenSegment(level)
                 && movingItem.segmentProgress + 1.0f / segmentDuration >= 0.5f) {
-            BlockPos brokenSegment = movingItem.path.get(movingItem.pathIndex + 1);
-            movingItem.targetConnector = brokenSegment;
-            movingItem.spillsAtEnd = true;
-            movingItem.waitingAtDestination = true;
-            movingItem.waitingForNextTube = false;
-            setChanged();
-            syncMovingItem(level);
-            tryInsertIntoTargetConnector(level);
+            markBrokenNextSegmentAsSpill(level);
             return;
         }
 
@@ -530,11 +530,46 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
     }
 
     private boolean isApproachingBrokenSegment(Level level) {
-        if (movingItem.pathIndex + 1 >= movingItem.path.size()) {
+        return findBrokenNextSegment(level) != null;
+    }
+
+    @javax.annotation.Nullable
+    private BlockPos findBrokenNextSegment(Level level) {
+        int nextPathIndex = movingItem.pathIndex + 1;
+        if (nextPathIndex >= movingItem.path.size()) {
+            return null;
+        }
+
+        BlockPos nextPos = movingItem.path.get(nextPathIndex);
+        if (!isPathNode(level, nextPos)) {
+            return nextPos;
+        }
+
+        if (level.getBlockEntity(nextPos) instanceof ItemPumpBlockEntity
+                && ++nextPathIndex < movingItem.path.size()) {
+            BlockPos afterPumpPos = movingItem.path.get(nextPathIndex);
+            if (!isPathNode(level, afterPumpPos)) {
+                return afterPumpPos;
+            }
+        }
+
+        return null;
+    }
+
+    private boolean markBrokenNextSegmentAsSpill(Level level) {
+        BlockPos brokenSegment = findBrokenNextSegment(level);
+        if (brokenSegment == null) {
             return false;
         }
 
-        return !isPathNode(level, movingItem.path.get(movingItem.pathIndex + 1));
+        movingItem.targetConnector = brokenSegment;
+        movingItem.spillsAtEnd = true;
+        movingItem.waitingAtDestination = true;
+        movingItem.waitingForNextTube = false;
+        setChanged();
+        syncMovingItem(level);
+        tryInsertIntoTargetConnector(level);
+        return true;
     }
 
     private boolean isApproachingFallbackEnd() {
@@ -568,13 +603,13 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
                 return;
             }
 
-            if (pathContainsRedstoneMerger(level)) {
-                holdMovingItemForRoute(level);
+            if (level.getBlockState(movingItem.targetConnector).isAir()) {
+                ejectMovingItem(level, getOpenEndPosition(movingItem.targetConnector));
                 return;
             }
 
-            if (level.getBlockState(movingItem.targetConnector).isAir()) {
-                ejectMovingItem(level, getOpenEndPosition(movingItem.targetConnector));
+            if (pathContainsRedstoneMerger(level)) {
+                holdMovingItemForRoute(level);
                 return;
             }
 
@@ -842,6 +877,156 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
 
     public MovingTubeItem getRenderMovingItem() {
         return movingItem;
+    }
+
+    /**
+     * Starts a visual-only transport inside a Ponder schematic.
+     *
+     * Ponder uses a client-side schematic level, so the normal server transport
+     * ticker is not available there. Keeping the demo item in the regular tube
+     * renderer makes packages follow exactly the same path as real transported
+     * items without touching inventories or spawning dropped items.
+     */
+    public void startPonderTransport(
+            ItemStack stack,
+            List<BlockPos> path,
+            BlockPos sourceConnector,
+            BlockPos targetConnector,
+            int moveTime
+    ) {
+        if (!(level instanceof PonderLevel)
+                || movingItem != null
+                || stack.isEmpty()
+                || path.isEmpty()) {
+            return;
+        }
+
+        int pathIndex = path.indexOf(worldPosition);
+        if (pathIndex < 0) {
+            return;
+        }
+
+        MovingTubeItem item = new MovingTubeItem(stack.copy(), List.copyOf(path), targetConnector.immutable());
+        item.sourceConnector = sourceConnector.immutable();
+        item.startsAtTubeOpenEnd = !(level.getBlockEntity(sourceConnector)
+                instanceof PneumaticConnectionBlockEntity);
+        item.endsAtTubeOpenEnd = !(level.getBlockEntity(targetConnector)
+                instanceof PneumaticConnectionBlockEntity);
+        item.startPathIndex = pathIndex;
+        item.pathIndex = pathIndex;
+        item.speedControllers = List.of();
+        item.moveTime = Math.max(MIN_PUMPED_MOVE_TIME, moveTime);
+        item.segmentDuration = calculateSegmentDuration(item, pathIndex);
+        item.hasSpeedControllerCache = true;
+        item.transportTopologyVersion = getTransportTopologyVersion(level);
+        item.animationId = nextPonderAnimationId();
+        item.startedAtGameTime = level.getGameTime();
+        item.lastTickedGameTime = Long.MIN_VALUE;
+        movingItem = item;
+        setChanged();
+    }
+
+    /** Advances one Ponder-only package by one scene tick. */
+    public void tickPonderTransport() {
+        if (!(level instanceof PonderLevel) || movingItem == null) {
+            return;
+        }
+
+        if (movingItem.waitingAtDestination) {
+            return;
+        }
+
+        int segmentDuration = Math.max(1, movingItem.segmentDuration);
+        movingItem.segmentProgress = Math.min(
+                1.0f,
+                movingItem.segmentProgress + 1.0f / segmentDuration
+        );
+        movingItem.progress = Math.round(movingItem.segmentProgress * segmentDuration);
+        if (movingItem.segmentProgress < 1.0f) {
+            setChanged();
+            return;
+        }
+
+        int nextOwnerPathIndex = findNextOwnerPathIndex(movingItem.path, movingItem.pathIndex);
+        if (nextOwnerPathIndex < 0) {
+            movingItem.waitingAtDestination = true;
+            setChanged();
+            return;
+        }
+
+        BlockEntity nextBlockEntity = level.getBlockEntity(movingItem.path.get(nextOwnerPathIndex));
+        if (!(nextBlockEntity instanceof PneumaticTubeBlockEntity nextTube)
+                || nextTube.movingItem != null) {
+            movingItem.waitingForNextTube = true;
+            setChanged();
+            return;
+        }
+
+        if (isPoweredPonderValve(this) || isPoweredPonderValve(nextTube)) {
+            movingItem.waitingForNextTube = true;
+            setChanged();
+            return;
+        }
+
+        MovingTubeItem item = movingItem;
+        movingItem = null;
+        item.pathIndex = nextOwnerPathIndex;
+        item.progress = 0;
+        item.segmentProgress = 0.0f;
+        item.segmentDuration = nextTube.calculateSegmentDuration(item, nextOwnerPathIndex);
+        item.startedAtGameTime = level.getGameTime();
+        item.waitingForNextTube = false;
+        item.waitingAtDestination = false;
+        nextTube.movingItem = item;
+        nextTube.setChanged();
+        setChanged();
+    }
+
+    /** Changes the speed of an item already travelling in a Ponder scene. */
+    public void setPonderTransportMoveTime(int moveTime) {
+        if (!(level instanceof PonderLevel) || movingItem == null) {
+            return;
+        }
+
+        movingItem.moveTime = Math.max(MIN_PUMPED_MOVE_TIME, moveTime);
+        movingItem.segmentDuration = calculateSegmentDuration(movingItem, movingItem.pathIndex);
+        setChanged();
+    }
+
+    /** Removes a package once the receiving Packager starts its Ponder animation. */
+    public void finishPonderTransport() {
+        if (!(level instanceof PonderLevel)
+                || movingItem == null
+                || !movingItem.waitingAtDestination) {
+            return;
+        }
+
+        clearPonderTransport();
+    }
+
+    /** Clears unfinished demo items when a Ponder scene ends or restarts. */
+    public void clearPonderTransport() {
+        if (!(level instanceof PonderLevel) || movingItem == null) {
+            return;
+        }
+
+        long animationId = movingItem.animationId;
+        movingItem = null;
+        Map<Long, ClientMotion> motions = CLIENT_MOTIONS.get(level);
+        if (motions != null) {
+            motions.remove(animationId);
+        }
+        setChanged();
+    }
+
+    private static synchronized long nextPonderAnimationId() {
+        return ponderAnimationSequence++;
+    }
+
+    private static boolean isPoweredPonderValve(PneumaticTubeBlockEntity tube) {
+        return tube instanceof ValveBlockEntity
+                && tube.getBlockState().hasProperty(BlockStateProperties.POWERED)
+                && tube.getBlockState().getValue(BlockStateProperties.POWERED);
     }
 
     public boolean shouldRenderMovingItem(float partialTick) {
@@ -1584,6 +1769,9 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         if (item.targetConnector == null || pathIndex < 0 || pathIndex >= item.path.size()) {
             return 1.0;
         }
+        if (item.endsAtTubeOpenEnd) {
+            return 0.42;
+        }
         return Vec3.atCenterOf(item.path.get(pathIndex))
                 .distanceTo(Vec3.atCenterOf(item.targetConnector));
     }
@@ -1591,6 +1779,10 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
     private double getSourceEntryDistance(MovingTubeItem item) {
         if (item.sourceConnector == null || item.path.isEmpty()) {
             return 0.0;
+        }
+
+        if (item.startsAtTubeOpenEnd) {
+            return 0.42;
         }
 
         BlockPos firstPathPos = item.path.get(0);

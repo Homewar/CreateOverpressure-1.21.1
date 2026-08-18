@@ -6,6 +6,7 @@ import java.util.List;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 
+import net.createmod.ponder.api.level.PonderLevel;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.client.renderer.entity.ItemRenderer;
@@ -116,10 +117,13 @@ public class PneumaticTubeRenderer implements BlockEntityRenderer<PneumaticTubeB
             renderCapsule(tube, item, step, poseStack, bufferSource, itemLight, packedOverlay);
         } else {
             poseStack.scale(ITEM_SCALE, ITEM_SCALE, ITEM_SCALE);
+            int renderedLight = tube.getLevel() instanceof PonderLevel
+                    ? LightTexture.FULL_BRIGHT
+                    : itemLight;
             itemRenderer.renderStatic(
                     item.stack,
                     ItemDisplayContext.FIXED,
-                    itemLight,
+                    renderedLight,
                     packedOverlay,
                     poseStack,
                     bufferSource,
@@ -329,7 +333,9 @@ public class PneumaticTubeRenderer implements BlockEntityRenderer<PneumaticTubeB
         addCurveIngress(points, tube, item, currentPos, pathIndex);
         points.add(current);
         if (nextOwnerPathIndex <= pathIndex) {
-            Vec3 next = Vec3.atLowerCornerOf(item.targetConnector.subtract(currentPos)).add(0.5, 0.5, 0.5);
+            Vec3 next = item.endsAtTubeOpenEnd
+                    ? getOpenEnd(currentPos, item.targetConnector)
+                    : Vec3.atLowerCornerOf(item.targetConnector.subtract(currentPos)).add(0.5, 0.5, 0.5);
             points.add(next);
             return interpolatePath(points, progress);
         }
@@ -402,12 +408,22 @@ public class PneumaticTubeRenderer implements BlockEntityRenderer<PneumaticTubeB
                 firstPathPos.getY() - item.sourceConnector.getY(),
                 firstPathPos.getZ() - item.sourceConnector.getZ()
         );
-        Vec3 sourceOutlet = Vec3.atLowerCornerOf(item.sourceConnector.subtract(rendererPos))
-                .add(
-                        0.5 + direction.getStepX() * 0.42,
-                        0.5 + direction.getStepY() * 0.42,
-                        0.5 + direction.getStepZ() * 0.42
-                );
+        Vec3 sourceOutlet;
+        if (item.startsAtTubeOpenEnd) {
+            sourceOutlet = Vec3.atLowerCornerOf(firstPathPos.subtract(rendererPos))
+                    .add(
+                            0.5 - direction.getStepX() * 0.42,
+                            0.5 - direction.getStepY() * 0.42,
+                            0.5 - direction.getStepZ() * 0.42
+                    );
+        } else {
+            sourceOutlet = Vec3.atLowerCornerOf(item.sourceConnector.subtract(rendererPos))
+                    .add(
+                            0.5 + direction.getStepX() * 0.42,
+                            0.5 + direction.getStepY() * 0.42,
+                            0.5 + direction.getStepZ() * 0.42
+                    );
+        }
         points.add(sourceOutlet);
 
         for (int pointIndex = 0; pointIndex < pathIndex; pointIndex++) {
@@ -485,6 +501,9 @@ public class PneumaticTubeRenderer implements BlockEntityRenderer<PneumaticTubeB
 
     private static Vec3 getNextLocalCenter(BlockPos currentPos, MovingTubeItem item, int pathIndex) {
         if (pathIndex + 1 >= item.path.size()) {
+            if (item.endsAtTubeOpenEnd) {
+                return getOpenEnd(currentPos, item.targetConnector);
+            }
             return Vec3.atLowerCornerOf(item.targetConnector.subtract(currentPos)).add(0.5, 0.5, 0.5);
         }
 
@@ -499,5 +518,6 @@ public class PneumaticTubeRenderer implements BlockEntityRenderer<PneumaticTubeB
                 0.5 + direction.getStepY() * 0.42,
                 0.5 + direction.getStepZ() * 0.42);
     }
+
 
 }

@@ -28,6 +28,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -146,7 +147,12 @@ public class CurvaturePneumaticTubeBlock extends PneumaticTubeBlock {
     @Override
     protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
         if (!state.is(newState.getBlock())) {
-            PneumaticTubeBlockEntity.invalidateClientPathAt(level, pos);
+            PneumaticTubeBlockEntity.invalidateTransportTopologyAt(level, pos);
+
+            if (!level.isClientSide && level.getBlockEntity(pos) instanceof PneumaticTubeBlockEntity tube) {
+                tube.ejectMovingItem(level, Vec3.atCenterOf(pos));
+            }
+
             destroySection(level, pos, null);
         }
 
