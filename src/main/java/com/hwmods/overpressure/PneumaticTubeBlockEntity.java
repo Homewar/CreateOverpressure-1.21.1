@@ -42,6 +42,10 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
     private static final int SPEED_BAR_SEGMENTS = 18;
     private static final int SPEED_CHECK_INTERVAL = 2;
     private static final float CLIENT_MAX_OWNER_LEAD = 2.0f;
+    private static final float CLIENT_QUEUE_SPACING = 0.72f;
+    private static final float CLIENT_QUEUE_CATCH_UP_SPEED = 1.25f;
+    private static final float CLIENT_MAX_QUEUE_RELEASE_LAG = 1.0f;
+    private static final float CLIENT_QUEUE_EPSILON = 0.01f;
     private static final long CLIENT_MOTION_TTL = 200L;
     private static final Map<Level, Map<Long, ClientMotion>> CLIENT_MOTIONS = new WeakHashMap<>();
     private static final Map<Level, Long> CLIENT_LAST_CLEANUP = new WeakHashMap<>();
@@ -65,7 +69,8 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         private int cachedSegmentDurationPathIndex = -1;
         private int cachedSegmentDuration;
         private long lastSegmentDurationCheck = Long.MIN_VALUE;
-        private boolean topologyDirty;
+        private boolean topologyDirty = true;
+        private boolean recoveringFromQueue;
 
         private ClientMotion(
                 MovingTubeItem item,
@@ -129,8 +134,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
     }
 
     public static void addTransportSpeedTooltip(List<Component> tooltip, int moveTime) {
-        int clampedMoveTime = moveTime <= 0 ? 0
-                : Math.max(MIN_PUMPED_MOVE_TIME, Math.min(BASE_MOVE_TIME, moveTime));
+        int clampedMoveTime = Math.max(0, moveTime);
         double blocksPerSecond = clampedMoveTime == 0 ? 0.0 : 20.0 / clampedMoveTime;
 
         CreateLang.builder()
@@ -153,7 +157,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         }
 
         double speed = 20.0 / moveTime;
-        double maxSpeed = 20.0 / MIN_PUMPED_MOVE_TIME;
+        double maxSpeed = 20.0 / Config.applyTubeSpeed(MIN_PUMPED_MOVE_TIME);
         int filled = Math.max(1, Math.min(SPEED_BAR_SEGMENTS, (int) Math.round(speed / maxSpeed * SPEED_BAR_SEGMENTS)));
         return Component.empty()
                 .append(Component.literal("|".repeat(filled)).withStyle(ChatFormatting.DARK_GREEN))
@@ -204,7 +208,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
     }
 
     public boolean canAcceptItem(ItemStack stack, TubePath path) {
-        if (movingItem != null || stack.isEmpty() || path.isEmpty()) {
+        if (movingItem != null || stack.isEmpty() || path.isEmpty() || !Config.canEnterTube(stack)) {
             return false;
         }
 
@@ -633,6 +637,11 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
             return;
         }
 
+        if (!canInsertIntoTargetConnector(level)) {
+            holdMovingItemForRoute(level);
+            return;
+        }
+
         boolean wasWaitingAtDestination = movingItem.waitingAtDestination;
         ItemStack remaining = connector.insertIntoAttachedInventory(level, movingItem.stack);
 
@@ -650,6 +659,23 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
                 syncMovingItem(level);
             }
         }
+    }
+
+    private boolean canInsertIntoTargetConnector(Level level) {
+        BlockState targetState = level.getBlockState(movingItem.targetConnector);
+        if (!(targetState.getBlock() instanceof PneumaticConnectionBlock)
+                || targetState.getValue(PneumaticConnectionBlock.MODE)
+                != PneumaticConnectionBlock.ConnectionMode.INSERT) {
+            return false;
+        }
+
+        Direction direction = Direction.getNearest(
+                movingItem.targetConnector.getX() - worldPosition.getX(),
+                movingItem.targetConnector.getY() - worldPosition.getY(),
+                movingItem.targetConnector.getZ() - worldPosition.getZ()
+        );
+        return targetState.getValue(PneumaticConnectionBlock.FACING) == direction
+                && canTravelTo(level, direction);
     }
 
     private boolean pathContainsRedstoneMerger(Level level) {
@@ -1097,14 +1123,33 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
 
         float serverProgress = ownerOrdinal + item.segmentProgress;
         float movementLimit = Math.min(motion.routeLimit, getClientQueueLimit(motion, item));
-        if (item.waitingForNextTube || item.waitingAtDestination) {
-            motion.routeProgress = Math.max(motion.routeProgress, serverProgress);
-        } else {
-            motion.routeProgress = Math.max(motion.routeProgress, serverProgress);
-            advanceClientRoute(motion, item, elapsed, movementLimit);
+        boolean queueConstrained = movementLimit + CLIENT_QUEUE_EPSILON < serverProgress;
+        if (queueConstrained) {
+            motion.recoveringFromQueue = true;
         }
 
-        float authorityFloor = ownerOrdinal + item.segmentProgress;
+        float constrainedServerProgress = Math.min(serverProgress, movementLimit);
+        if (item.waitingForNextTube || item.waitingAtDestination) {
+            motion.routeProgress = Math.max(motion.routeProgress, constrainedServerProgress);
+        } else {
+            motion.routeProgress = Math.max(motion.routeProgress, constrainedServerProgress);
+            float catchUpMultiplier = motion.recoveringFromQueue && !queueConstrained
+                    ? CLIENT_QUEUE_CATCH_UP_SPEED
+                    : 1.0f;
+            advanceClientRoute(motion, item, elapsed * catchUpMultiplier, movementLimit);
+        }
+
+        float authorityFloor;
+        if (queueConstrained) {
+            authorityFloor = constrainedServerProgress;
+        } else if (motion.recoveringFromQueue) {
+            authorityFloor = Math.max(0.0f, serverProgress - CLIENT_MAX_QUEUE_RELEASE_LAG);
+            if (motion.routeProgress + CLIENT_QUEUE_EPSILON >= serverProgress) {
+                motion.recoveringFromQueue = false;
+            }
+        } else {
+            authorityFloor = serverProgress;
+        }
         float leadLimit = Math.min(
                 motion.ownerPathIndexes.size(),
                 ownerOrdinal + CLIENT_MAX_OWNER_LEAD
@@ -1212,7 +1257,50 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
             return motion.ownerPathIndexes.size();
         }
 
-        return motion.authoritativeOwnerOrdinal + 1.0f;
+        if (!motion.path.equals(nextItem.path)) {
+            return motion.authoritativeOwnerOrdinal + 1.0f;
+        }
+
+        if (motion.routeLimit + CLIENT_QUEUE_EPSILON < motion.ownerPathIndexes.size()) {
+            int queuedItemsAhead = 0;
+            int lastQueueOwnerOrdinal = Math.min(
+                    motion.ownerPathIndexes.size() - 1,
+                    (int) Math.floor(motion.routeLimit)
+            );
+            for (int ownerOrdinal = nextOwnerOrdinal;
+                 ownerOrdinal <= lastQueueOwnerOrdinal;
+                 ownerOrdinal++) {
+                int ownerPathIndex = motion.ownerPathIndexes.get(ownerOrdinal);
+                BlockEntity owner = level.getBlockEntity(item.path.get(ownerPathIndex));
+                if (!(owner instanceof PneumaticTubeBlockEntity queuedTube)) {
+                    break;
+                }
+                MovingTubeItem queuedItem = queuedTube.getMovingItem();
+                if (queuedItem == null || queuedItem.animationId == item.animationId) {
+                    break;
+                }
+                queuedItemsAhead++;
+            }
+
+            return Math.max(
+                    motion.authoritativeOwnerOrdinal,
+                    motion.routeLimit - queuedItemsAhead * CLIENT_QUEUE_SPACING
+            );
+        }
+
+        float nextItemProgress = nextOwnerOrdinal + nextItem.segmentProgress;
+        Map<Long, ClientMotion> motions = CLIENT_MOTIONS.get(level);
+        if (motions != null) {
+            ClientMotion nextMotion = motions.get(nextItem.animationId);
+            if (nextMotion != null && motion.path.equals(nextMotion.path)) {
+                nextItemProgress = nextMotion.routeProgress;
+            }
+        }
+
+        return Math.max(
+                motion.authoritativeOwnerOrdinal,
+                nextItemProgress - CLIENT_QUEUE_SPACING
+        );
     }
 
     private int getClientSegmentDuration(ClientMotion motion, MovingTubeItem item, int pathIndex) {
@@ -1269,7 +1357,10 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         motion.cachedSegmentDurationPathIndex = -1;
         motion.lastSegmentDurationCheck = Long.MIN_VALUE;
 
-        for (int pathIndex = 0; pathIndex + 1 < motion.path.size(); pathIndex++) {
+        int authoritativePathIndex = motion.ownerPathIndexes.get(motion.authoritativeOwnerOrdinal);
+        for (int pathIndex = authoritativePathIndex;
+             pathIndex + 1 < motion.path.size();
+             pathIndex++) {
             boolean oldMergerPassageAfterRoleChange = isMergerPassageAfterRoleChange(
                     level,
                     motion.path,

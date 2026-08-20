@@ -9,6 +9,7 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.client.event.ModelEvent;
+import net.neoforged.neoforge.client.event.RegisterParticleProvidersEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 
@@ -30,6 +31,7 @@ public class OverpressureClient {
         modBus.addListener(OverpressureClient::registerRenderers);
         modBus.addListener(OverpressureClient::registerAdditionalModels);
         modBus.addListener(OverpressureClient::modifyBakedModels);
+        modBus.addListener(OverpressureClient::registerParticleProviders);
 
         // Allows NeoForge to create a config screen for this mod's configs.
         // The config screen is accessed by going to the Mods screen > clicking on your mod > clicking on config.
@@ -82,6 +84,10 @@ public class OverpressureClient {
         event.register(PNEUMATIC_CAPSULE_MODEL);
         event.register(DEVIDER_BLOCK_MODEL);
         event.register(DEVIDER_MERGE_BLOCK_MODEL);
+    }
+
+    static void registerParticleProviders(RegisterParticleProvidersEvent event) {
+        event.registerSpriteSet(ModParticleTypes.WHITE_SPLASH.get(), WhiteSplashParticle.Provider::new);
     }
 
     static void modifyBakedModels(ModelEvent.ModifyBakingResult event) {

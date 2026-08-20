@@ -35,20 +35,20 @@ public abstract class GrindRailPlayerPoseMixin {
                 ? player.getMainArm()
                 : player.getMainArm().getOpposite();
 
-        // The wrench arm reaches almost straight above the shoulder. A tiny
-        // inward roll places the wrench over the middle of the player's head.
+        // Keep the gripping arm completely vertical. The player renderer uses
+        // this shoulder/hand axis as the pivot while the body turns.
         if (wrenchArm == HumanoidArm.RIGHT) {
-            model.rightArm.xRot = -2.92F;
+            model.rightArm.xRot = -(float)Math.PI;
             model.rightArm.yRot = 0.0F;
-            model.rightArm.zRot = 0.10F;
+            model.rightArm.zRot = 0.0F;
 
             model.leftArm.xRot = -0.42F;
             model.leftArm.yRot = 0.12F;
             model.leftArm.zRot = -0.24F;
         } else {
-            model.leftArm.xRot = -2.92F;
+            model.leftArm.xRot = -(float)Math.PI;
             model.leftArm.yRot = 0.0F;
-            model.leftArm.zRot = -0.10F;
+            model.leftArm.zRot = 0.0F;
 
             model.rightArm.xRot = -0.42F;
             model.rightArm.yRot = -0.12F;

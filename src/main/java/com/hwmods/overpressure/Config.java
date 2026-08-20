@@ -1,40 +1,56 @@
 package com.hwmods.overpressure;
 
-import java.util.List;
-
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
-// An example config class. This is not required, but it's a good idea to have one to keep your config organized.
-// Demonstrates how to use Neo's config APIs
-public class Config {
+public final class Config {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
+    private static final TagKey<Item> CREATE_PACKAGES = TagKey.create(
+            net.minecraft.core.registries.Registries.ITEM,
+            ResourceLocation.fromNamespaceAndPath("create", "packages")
+    );
 
-    public static final ModConfigSpec.BooleanValue LOG_DIRT_BLOCK = BUILDER
-            .comment("Whether to log the dirt block on common setup")
-            .define("logDirtBlock", true);
+    public static final ModConfigSpec.DoubleValue TUBE_SPEED_MULTIPLIER;
+    public static final ModConfigSpec.BooleanValue PACKAGERS_ONLY;
+    public static final ModConfigSpec.DoubleValue SOUND_VOLUME;
 
-    public static final ModConfigSpec.IntValue MAGIC_NUMBER = BUILDER
-            .comment("A magic number")
-            .defineInRange("magicNumber", 42, 0, Integer.MAX_VALUE);
+    static {
+        BUILDER.push("pneumaticTubes");
+        TUBE_SPEED_MULTIPLIER = BUILDER
+                .comment(
+                        "Global pneumatic tube speed multiplier.",
+                        "2.0 is twice as fast; 0.5 is twice as slow."
+                )
+                .defineInRange("speedMultiplier", 1.0, 0.1, 10.0);
+        PACKAGERS_ONLY = BUILDER
+                .comment(
+                        "When enabled, pneumatic connectors only work with Create Packagers",
+                        "and only sealed packages can enter a tube network."
+                )
+                .define("packagersOnly", false);
+        BUILDER.pop();
 
-    public static final ModConfigSpec.ConfigValue<String> MAGIC_NUMBER_INTRODUCTION = BUILDER
-            .comment("What you want the introduction message to be for the magic number")
-            .define("magicNumberIntroduction", "The magic number is... ");
-
-    // a list of strings that are treated as resource locations for items
-    public static final ModConfigSpec.ConfigValue<List<? extends String>> ITEM_STRINGS = BUILDER
-            .comment("A list of items to log on common setup.")
-            .defineListAllowEmpty("items", List.of("minecraft:iron_ingot"), () -> "", Config::validateItemName);
-
-    public static final ModConfigSpec.DoubleValue SOUND_VOLUME = BUILDER
-            .comment("Volume for all grind rail sounds.")
-            .defineInRange("soundVolume", 0.5, 0.0, 1.0);
+        SOUND_VOLUME = BUILDER
+                .comment("Volume for all grind rail sounds.")
+                .defineInRange("soundVolume", 0.5, 0.0, 1.0);
+    }
 
     static final ModConfigSpec SPEC = BUILDER.build();
 
-    private static boolean validateItemName(final Object obj) {
-        return obj instanceof String itemName && BuiltInRegistries.ITEM.containsKey(ResourceLocation.parse(itemName));
+    public static int applyTubeSpeed(int moveTime) {
+        if (moveTime <= 0) {
+            return 0;
+        }
+        return Math.max(1, (int)Math.ceil(moveTime / TUBE_SPEED_MULTIPLIER.get()));
+    }
+
+    public static boolean canEnterTube(ItemStack stack) {
+        return !PACKAGERS_ONLY.get() || stack.is(CREATE_PACKAGES);
+    }
+
+    private Config() {
     }
 }

@@ -5,7 +5,9 @@
   "mixins": [],
   "client": [
     "ValueSettingsClientMixin",
-    "GrindRailPlayerPoseMixin"
+    "GrindRailPlayerPoseMixin",
+    "GrindRailPlayerRendererMixin",
+    "GrindRailHeldItemMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -3,6 +3,7 @@ package com.hwmods.overpressure;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import com.simibubi.create.foundation.blockEntity.behaviour.filtering.FilteringBehaviour;
+import com.simibubi.create.content.logistics.packager.PackagerBlockEntity;
 
 import javax.annotation.Nullable;
 
@@ -140,6 +141,10 @@ public class PneumaticConnectionBlockEntity extends SmartBlockEntity {
         }
 
         BlockPos inventoryPos = worldPosition.relative(inventorySide);
+        if (Config.PACKAGERS_ONLY.get()
+                && !(level.getBlockEntity(inventoryPos) instanceof PackagerBlockEntity)) {
+            return null;
+        }
         IItemHandler handler = level.getCapability(
                 Capabilities.ItemHandler.BLOCK,
                 inventoryPos,
@@ -172,7 +177,7 @@ public class PneumaticConnectionBlockEntity extends SmartBlockEntity {
         for (int slot = 0; slot < handler.getSlots(); slot++) {
             ItemStack simulated = handler.extractItem(slot, 1, true);
 
-            if (!simulated.isEmpty() && filtering.test(simulated)) {
+            if (!simulated.isEmpty() && Config.canEnterTube(simulated) && filtering.test(simulated)) {
                 return simulate ? simulated : handler.extractItem(slot, 1, false);
             }
         }

@@ -50,7 +50,7 @@ public class ItemPumpBlockEntity extends KineticBlockEntity implements IHaveGogg
 
     public int getMoveTime() {
         if (isCreative()) {
-            return PneumaticTubeBlockEntity.MIN_PUMPED_MOVE_TIME;
+            return Config.applyTubeSpeed(PneumaticTubeBlockEntity.MIN_PUMPED_MOVE_TIME);
         }
 
         float speed = Math.abs(getSpeed());
@@ -60,10 +60,11 @@ public class ItemPumpBlockEntity extends KineticBlockEntity implements IHaveGogg
         }
 
         int moveTime = (int) Math.ceil(RPM_TICK_SCALE / speed);
-        return Math.max(
+        int baseMoveTime = Math.max(
                 PneumaticTubeBlockEntity.MIN_PUMPED_MOVE_TIME,
                 Math.min(PneumaticTubeBlockEntity.BASE_MOVE_TIME, moveTime)
         );
+        return Config.applyTubeSpeed(baseMoveTime);
     }
 
     public boolean isRunning() {

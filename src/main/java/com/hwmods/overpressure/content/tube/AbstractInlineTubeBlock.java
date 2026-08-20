@@ -1,6 +1,13 @@
 package com.hwmods.overpressure.content.tube;
 
+import com.hwmods.overpressure.ClogSensorBlock;
+import com.hwmods.overpressure.CurvaturePneumaticTubeBlock;
+import com.hwmods.overpressure.ItemPumpBlock;
+import com.hwmods.overpressure.PneumaticConnectionBlock;
+import com.hwmods.overpressure.PneumaticLine;
+import com.hwmods.overpressure.PneumaticTubeBlock;
 import com.hwmods.overpressure.PneumaticTubeBlockEntity;
+import com.hwmods.overpressure.ValveBlock;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 
 import net.minecraft.core.BlockPos;
@@ -72,11 +79,50 @@ public abstract class AbstractInlineTubeBlock extends BaseEntityBlock
 
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
+        Level level = context.getLevel();
         BlockPos pos = context.getClickedPos();
-        return defaultBlockState()
-                .setValue(BlockStateProperties.FACING, context.getNearestLookingDirection().getOpposite())
+        Direction nearestLookingDirection = context.getNearestLookingDirection();
+        boolean isSneaking = context.getPlayer() != null && context.getPlayer().isShiftKeyDown();
+        Direction clickedFace = context.getClickedFace();
+        BlockPos clickedPos = pos.relative(clickedFace.getOpposite());
+        boolean placedAgainstPneumaticLine = PneumaticLine.isPathNode(level, clickedPos);
+        Direction targetDirection = placedAgainstPneumaticLine
+                ? (isSneaking ? clickedFace.getOpposite() : clickedFace)
+                : (isSneaking ? nearestLookingDirection.getOpposite() : nearestLookingDirection);
+        BlockState toPlace = defaultBlockState()
+                .setValue(BlockStateProperties.FACING, targetDirection)
                 .setValue(BlockStateProperties.POWERED, getPoweredStateForPlacement(context))
-                .setValue(BlockStateProperties.WATERLOGGED, context.getLevel().getFluidState(pos).is(Fluids.WATER));
+                .setValue(BlockStateProperties.WATERLOGGED, level.getFluidState(pos).is(Fluids.WATER));
+
+        Direction bestConnectedDirection = null;
+        double bestDistance = Double.MAX_VALUE;
+
+        for (Direction direction : Direction.values()) {
+            BlockState neighborState = level.getBlockState(pos.relative(direction));
+
+            if (!canConnectToPneumaticLine(neighborState, direction.getOpposite())) {
+                continue;
+            }
+
+            double distance = Vec3.atLowerCornerOf(direction.getNormal())
+                    .distanceTo(Vec3.atLowerCornerOf(targetDirection.getNormal()));
+
+            if (distance > bestDistance) {
+                continue;
+            }
+
+            bestDistance = distance;
+            bestConnectedDirection = direction;
+        }
+
+        if (bestConnectedDirection != null
+                && bestConnectedDirection.getAxis() != targetDirection.getAxis()
+                && !placedAgainstPneumaticLine
+                && !isSneaking) {
+            return toPlace.setValue(BlockStateProperties.FACING, bestConnectedDirection);
+        }
+
+        return toPlace;
     }
 
     protected boolean getPoweredStateForPlacement(BlockPlaceContext context) {
@@ -100,6 +146,34 @@ public abstract class AbstractInlineTubeBlock extends BaseEntityBlock
 
     public boolean canTravelTo(BlockState state, Direction direction) {
         return state.getValue(BlockStateProperties.FACING).getAxis() == direction.getAxis();
+    }
+
+    private boolean canConnectToPneumaticLine(BlockState state, Direction directionFromNeighbor) {
+        if (state.getBlock() instanceof PneumaticTubeBlock) {
+            return state.getValue(PneumaticTubeBlock.getConnectionProperty(directionFromNeighbor));
+        }
+
+        if (state.getBlock() instanceof CurvaturePneumaticTubeBlock) {
+            return state.getValue(PneumaticTubeBlock.getConnectionProperty(directionFromNeighbor));
+        }
+
+        if (state.getBlock() instanceof PneumaticConnectionBlock) {
+            return state.getValue(PneumaticConnectionBlock.FACING).getAxis() == directionFromNeighbor.getAxis();
+        }
+
+        if (state.getBlock() instanceof ItemPumpBlock pump) {
+            return pump.canTravelTo(state, directionFromNeighbor);
+        }
+
+        if (state.getBlock() instanceof ValveBlock valve) {
+            return valve.canTravelTo(state, directionFromNeighbor);
+        }
+
+        if (state.getBlock() instanceof ClogSensorBlock sensor) {
+            return sensor.canTravelTo(state, directionFromNeighbor);
+        }
+
+        return false;
     }
 
     @Override

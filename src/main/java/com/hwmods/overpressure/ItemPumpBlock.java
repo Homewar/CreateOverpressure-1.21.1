@@ -81,9 +81,13 @@ public class ItemPumpBlock extends DirectionalKineticBlock
         toPlace = ProperWaterloggedBlock.withWater(level, toPlace, pos);
 
         Direction nearestLookingDirection = context.getNearestLookingDirection();
-        Direction targetDirection = context.getPlayer() != null && context.getPlayer().isShiftKeyDown()
-                ? nearestLookingDirection
-                : nearestLookingDirection.getOpposite();
+        boolean isSneaking = context.getPlayer() != null && context.getPlayer().isShiftKeyDown();
+        Direction clickedFace = context.getClickedFace();
+        BlockPos clickedPos = pos.relative(clickedFace.getOpposite());
+        boolean placedAgainstPneumaticLine = PneumaticLine.isPathNode(level, clickedPos);
+        Direction targetDirection = placedAgainstPneumaticLine
+                ? (isSneaking ? clickedFace.getOpposite() : clickedFace)
+                : (isSneaking ? nearestLookingDirection : nearestLookingDirection.getOpposite());
         Direction bestConnectedDirection = null;
         double bestDistance = Double.MAX_VALUE;
 
@@ -108,7 +112,8 @@ public class ItemPumpBlock extends DirectionalKineticBlock
 
         if (bestConnectedDirection != null
                 && bestConnectedDirection.getAxis() != targetDirection.getAxis()
-                && (context.getPlayer() == null || !context.getPlayer().isShiftKeyDown())) {
+                && !placedAgainstPneumaticLine
+                && !isSneaking) {
             return toPlace.setValue(FACING, bestConnectedDirection);
         }
 

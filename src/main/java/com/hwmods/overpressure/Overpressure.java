@@ -22,6 +22,7 @@ public class Overpressure {
         ModBlocks.register(modBus);
         ModBlockEntities.BLOCK_ENTITIES.register(modBus);
         ModSoundEvents.SOUND_EVENTS.register(modBus);
+        ModParticleTypes.PARTICLE_TYPES.register(modBus);
         modBus.addListener(this::commonSetup);
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
     }

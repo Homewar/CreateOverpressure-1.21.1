@@ -41,12 +41,32 @@ public final class PneumaticLine {
     }
 
     public static boolean isTravelAllowed(Level level, BlockPos from, BlockPos to) {
+        return isTravelAllowed(level, from, to, true);
+    }
+
+    /**
+     * Checks whether two components form a valid route without treating a
+     * powered valve as a permanent break in that route. Runtime movement still
+     * uses {@link #isTravelAllowed(Level, BlockPos, BlockPos)} and stops at the
+     * closed valve, allowing items behind it to form a queue.
+     */
+    public static boolean isRouteAllowed(Level level, BlockPos from, BlockPos to) {
+        return isTravelAllowed(level, from, to, false);
+    }
+
+    private static boolean isTravelAllowed(
+            Level level,
+            BlockPos from,
+            BlockPos to,
+            boolean respectValvePower
+    ) {
         BlockEntity fromBlockEntity = level.getBlockEntity(from);
         BlockEntity toBlockEntity = level.getBlockEntity(to);
 
         if (fromBlockEntity instanceof DeviderBlockEntity devider) {
             Direction movementDirection = getDirectionBetween(from, to);
-            if (movementDirection == null || !componentAllowsMovement(level, to, movementDirection)) {
+            if (movementDirection == null
+                    || !componentAllowsMovement(level, to, movementDirection, respectValvePower)) {
                 return false;
             }
             if (devider.isStraightPosition(to)) {
@@ -61,7 +81,8 @@ public final class PneumaticLine {
 
         if (toBlockEntity instanceof DeviderBlockEntity devider) {
             Direction movementDirection = getDirectionBetween(from, to);
-            if (movementDirection == null || !componentAllowsMovement(level, from, movementDirection)) {
+            if (movementDirection == null
+                    || !componentAllowsMovement(level, from, movementDirection, respectValvePower)) {
                 return false;
             }
             if (devider.isStraightPosition(from)) {
@@ -75,16 +96,31 @@ public final class PneumaticLine {
         }
 
         Direction direction = getDirectionBetween(from, to);
-        return direction != null && isTravelAllowed(level, from, to, direction);
+        return direction != null && strictTravelAllowed(
+                level,
+                from,
+                to,
+                direction,
+                respectValvePower
+        );
     }
 
-    private static boolean componentAllowsMovement(Level level, BlockPos pos, Direction movementDirection) {
+    private static boolean componentAllowsMovement(
+            Level level,
+            BlockPos pos,
+            Direction movementDirection,
+            boolean respectValvePower
+    ) {
         BlockState state = level.getBlockState(pos);
         if (state.getBlock() instanceof ItemPumpBlock pump) {
             return pump.allowsTravel(level, pos, state, movementDirection);
         }
-        return !(state.getBlock() instanceof ValveBlock valve)
-                || valve.allowsTravel(state, movementDirection);
+        if (state.getBlock() instanceof ValveBlock valve) {
+            return respectValvePower
+                    ? valve.allowsTravel(state, movementDirection)
+                    : valve.canTravelTo(state, movementDirection);
+        }
+        return true;
     }
 
     public static boolean isTravelAllowed(Level level, BlockPos from, BlockPos to, Direction direction) {
@@ -92,7 +128,15 @@ public final class PneumaticLine {
             return false;
         }
 
-        return strictTravelAllowed(level, from, to, direction);
+        return strictTravelAllowed(level, from, to, direction, true);
+    }
+
+    public static boolean isRouteAllowed(Level level, BlockPos from, BlockPos to, Direction direction) {
+        if (!isPathNode(level, to)) {
+            return false;
+        }
+
+        return strictTravelAllowed(level, from, to, direction, false);
     }
 
     private static Direction getDirectionBetween(BlockPos from, BlockPos to) {
@@ -104,7 +148,13 @@ public final class PneumaticLine {
         return null;
     }
 
-    private static boolean strictTravelAllowed(Level level, BlockPos from, BlockPos to, Direction direction) {
+    private static boolean strictTravelAllowed(
+            Level level,
+            BlockPos from,
+            BlockPos to,
+            Direction direction,
+            boolean respectValvePower
+    ) {
         BlockEntity fromBlockEntity = level.getBlockEntity(from);
         BlockEntity toBlockEntity = level.getBlockEntity(to);
 
@@ -113,7 +163,7 @@ public final class PneumaticLine {
             return false;
         }
 
-        if (!componentAllowsMovement(level, from, direction)) {
+        if (!componentAllowsMovement(level, from, direction, respectValvePower)) {
             return false;
         }
 
@@ -127,7 +177,7 @@ public final class PneumaticLine {
             return false;
         }
 
-        if (!componentAllowsMovement(level, to, direction)) {
+        if (!componentAllowsMovement(level, to, direction, respectValvePower)) {
             return false;
         }
 

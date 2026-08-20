@@ -6,9 +6,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import javax.annotation.Nullable;
+
 import com.simibubi.create.AllItems;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -27,6 +30,10 @@ public final class GrindRailRidingHandler {
     private static final double MIN_SPEED = 0.16;
     private static final double MAX_SPEED = 0.58;
     private static final double ACCELERATION = 0.012;
+    private static final int INITIAL_SPARK_DELAY = 8;
+    private static final int MIN_SPARK_INTERVAL = 1;
+    private static final int SPARK_INTERVAL_VARIATION = 2;
+    private static final double SPARK_HEIGHT_OFFSET = 1.0 / 16.0;
     private static final Map<UUID, RideState> SERVER_RIDERS = new HashMap<>();
     private static final Map<UUID, RideState> CLIENT_RIDERS = new HashMap<>();
 
@@ -68,7 +75,13 @@ public final class GrindRailRidingHandler {
                 tangent = tangent.scale(-1.0);
             }
             double initialSpeed = Math.abs(currentMotion.dot(tangent));
-            state = new RideState(Math.max(MIN_SPEED, initialSpeed), tangent);
+            state = new RideState(
+                    Math.max(MIN_SPEED, initialSpeed),
+                    tangent,
+                    contact.point(),
+                    contact.point(),
+                    INITIAL_SPARK_DELAY
+            );
             riders.put(playerId, state);
         } else if (state.direction().dot(tangent) < 0.0) {
             tangent = tangent.scale(-1.0);
@@ -89,7 +102,50 @@ public final class GrindRailRidingHandler {
         player.fallDistance = 0.0f;
         player.setOnGround(false);
         player.hurtMarked = true;
-        riders.put(playerId, new RideState(speed, advance.direction()));
+        int sparkCooldown = state.sparkCooldown() - 1;
+        if (player.level().isClientSide && sparkCooldown <= 0) {
+            spawnSparks(player, contact.point(), advance.direction(), speed);
+            sparkCooldown = MIN_SPARK_INTERVAL + player.getRandom().nextInt(SPARK_INTERVAL_VARIATION);
+        }
+
+        // Rendering must use the rail point above the player's current tick
+        // position. advance.point() is the destination for the next tick and
+        // made the locked wrench appear up to one movement step ahead.
+        riders.put(playerId, new RideState(
+                speed,
+                advance.direction(),
+                contact.point(),
+                state.railPoint(),
+                sparkCooldown
+        ));
+    }
+
+    private static void spawnSparks(Player player, Vec3 railPoint, Vec3 direction, double speed) {
+        RandomSource random = player.getRandom();
+        Vec3 travelDirection = direction.lengthSqr() < 1.0E-8 ? Vec3.ZERO : direction.normalize();
+        Vec3 sideways = new Vec3(-travelDirection.z, 0.0, travelDirection.x);
+        int particleCount = 4;
+        if (speed > 0.38) {
+            particleCount += 1 + random.nextInt(2);
+        }
+        for (int index = 0; index < particleCount; index++) {
+            double sideVelocity = (random.nextDouble() - 0.5) * 0.11;
+            double backwardVelocity = -(0.025 + speed * (0.055 + random.nextDouble() * 0.035));
+            double sideOffset = (random.nextDouble() - 0.5) * 0.09;
+            Vec3 velocity = travelDirection.scale(backwardVelocity)
+                    .add(sideways.scale(sideVelocity))
+                    .add(0.0, -0.008 - random.nextDouble() * 0.03, 0.0);
+
+            player.level().addParticle(
+                    ModParticleTypes.WHITE_SPLASH.get(),
+                    railPoint.x + sideways.x * sideOffset,
+                    railPoint.y + 0.03 + SPARK_HEIGHT_OFFSET + random.nextDouble() * 0.035,
+                    railPoint.z + sideways.z * sideOffset,
+                    velocity.x,
+                    velocity.y,
+                    velocity.z
+            );
+        }
     }
 
     private static boolean canHoldRail(Player player) {
@@ -111,6 +167,18 @@ public final class GrindRailRidingHandler {
     static double clientSpeed(Player player) {
         RideState state = CLIENT_RIDERS.get(player.getUUID());
         return state == null ? 0.0 : state.speed();
+    }
+
+    @Nullable
+    public static Vec3 clientRailPoint(Player player, float partialTick) {
+        RideState state = CLIENT_RIDERS.get(player.getUUID());
+        return state == null ? null : state.previousRailPoint().lerp(state.railPoint(), partialTick);
+    }
+
+    @Nullable
+    public static Vec3 clientRailDirection(Player player) {
+        RideState state = CLIENT_RIDERS.get(player.getUUID());
+        return state == null ? null : state.direction();
     }
 
     private static RailContact findNearestRail(Player player, Vec3 hookPosition) {
@@ -217,7 +285,13 @@ public final class GrindRailRidingHandler {
                 + rail.getWorldP2().distanceTo(rail.getWorldP3());
     }
 
-    private record RideState(double speed, Vec3 direction) {
+    private record RideState(
+            double speed,
+            Vec3 direction,
+            Vec3 railPoint,
+            Vec3 previousRailPoint,
+            int sparkCooldown
+    ) {
     }
 
     private record RailContact(
