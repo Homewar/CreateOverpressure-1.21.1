@@ -196,6 +196,22 @@ tasks.withType(JavaCompile).configureEach {
     options.compilerArgs.add('-Xlint:deprecation')
 }
 
+// Ship the applicable license notices with every distributable JAR.
+tasks.named('jar', Jar).configure {
+    from('LICENSE.md') {
+        into('META-INF')
+        rename { 'OVERPRESSURE_CODE_LICENSE.md' }
+    }
+    from('ASSETS_LICENSE.md') {
+        into('META-INF')
+        rename { 'OVERPRESSURE_ASSETS_LICENSE.md' }
+    }
+    from('TEMPLATE_LICENSE.txt') {
+        into('META-INF')
+        rename { 'NEOFORGED_MDK_LICENSE.txt' }
+    }
+}
+
 // IDEA no longer automatically downloads sources/javadoc jars for dependencies, so we need to explicitly enable the behavior.
 idea {
     module {
