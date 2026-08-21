@@ -8,6 +8,7 @@
   "block.overpressure.devider": "Трубный узел",
   "block.overpressure.valve": "Пневматический клапан",
   "block.overpressure.clog_sensor": "Датчик засора пневмотрубы",
+  "block.overpressure.capsule_port": "Капсульный порт",
   "block.overpressure.grind_rail": "Рельс для скольжения",
   "block.overpressure.grind_rail_support": "Крепление рельса для скольжения",
   "subtitles.overpressure.grind_collide": "Лязг",

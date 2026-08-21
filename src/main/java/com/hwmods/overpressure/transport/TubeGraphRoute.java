@@ -28,7 +28,7 @@ public record TubeGraphRoute(List<Step> steps) {
     ) {
         List<Step> steps = new ArrayList<>();
         if (sourceConnector != null) {
-            steps.add(new NodeStep(sourceConnector.immutable(), NodeKind.CONNECTOR));
+            steps.add(new NodeStep(sourceConnector.immutable(), endpointNodeKind(level, sourceConnector)));
         }
 
         List<BlockPos> edgeCells = new ArrayList<>();
@@ -46,11 +46,18 @@ public record TubeGraphRoute(List<Step> steps) {
 
         if (targetConnector != null) {
             NodeKind kind = level.getBlockEntity(targetConnector) instanceof TransportEndpoint
-                    ? NodeKind.CONNECTOR
+                    ? endpointNodeKind(level, targetConnector)
                     : NodeKind.OPEN_END;
             steps.add(new NodeStep(targetConnector.immutable(), kind));
         }
         return new TubeGraphRoute(steps);
+    }
+
+    private static NodeKind endpointNodeKind(Level level, BlockPos pos) {
+        BlockEntity blockEntity = level.getBlockEntity(pos);
+        return blockEntity instanceof TransportNodeComponent node
+                ? node.graphNodeKind()
+                : NodeKind.CONNECTOR;
     }
 
     private static void flushEdge(List<Step> steps, List<BlockPos> edgeCells) {
@@ -87,6 +94,7 @@ public record TubeGraphRoute(List<Step> steps) {
 
     public enum NodeKind {
         CONNECTOR,
+        CAPSULE_PORT,
         PUMP,
         JUNCTION,
         VALVE,

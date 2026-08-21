@@ -1,0 +1,17 @@
+{
+  "multipart": [
+    { "when": { "facing": "down", "open": "false" }, "apply": { "model": "overpressure:block/capsule_port/capsule_port" } },
+    { "when": { "facing": "east", "open": "false" }, "apply": { "model": "overpressure:block/capsule_port/capsule_port", "x": 270, "y": 90 } },
+    { "when": { "facing": "north", "open": "false" }, "apply": { "model": "overpressure:block/capsule_port/capsule_port", "x": 270 } },
+    { "when": { "facing": "south", "open": "false" }, "apply": { "model": "overpressure:block/capsule_port/capsule_port", "x": 270, "y": 180 } },
+    { "when": { "facing": "up", "open": "false" }, "apply": { "model": "overpressure:block/capsule_port/capsule_port", "x": 180 } },
+    { "when": { "facing": "west", "open": "false" }, "apply": { "model": "overpressure:block/capsule_port/capsule_port", "x": 270, "y": 270 } },
+
+    { "when": { "facing": "down", "open": "true" }, "apply": { "model": "overpressure:block/capsule_port/capsule_port" } },
+    { "when": { "facing": "east", "open": "true" }, "apply": { "model": "overpressure:block/capsule_port/capsule_port", "x": 270, "y": 90 } },
+    { "when": { "facing": "north", "open": "true" }, "apply": { "model": "overpressure:block/capsule_port/capsule_port", "x": 270 } },
+    { "when": { "facing": "south", "open": "true" }, "apply": { "model": "overpressure:block/capsule_port/capsule_port", "x": 270, "y": 180 } },
+    { "when": { "facing": "up", "open": "true" }, "apply": { "model": "overpressure:block/capsule_port/capsule_port", "x": 180 } },
+    { "when": { "facing": "west", "open": "true" }, "apply": { "model": "overpressure:block/capsule_port/capsule_port", "x": 270, "y": 270 } }
+  ]
+}

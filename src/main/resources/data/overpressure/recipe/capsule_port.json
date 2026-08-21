@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " B ",
+    "BCB",
+    " T "
+  ],
+  "key": {
+    "B": {
+      "item": "create:brass_sheet"
+    },
+    "C": {
+      "item": "create:brass_casing"
+    },
+    "T": {
+      "item": "overpressure:pneumatic_tube"
+    }
+  },
+  "result": {
+    "id": "overpressure:capsule_port",
+    "count": 1
+  }
+}

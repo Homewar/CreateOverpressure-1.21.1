@@ -8,6 +8,7 @@
   "block.overpressure.devider": "Tube Junction",
   "block.overpressure.valve": "Pneumatic Valve",
   "block.overpressure.clog_sensor": "Pneumatic Clog Sensor",
+  "block.overpressure.capsule_port": "Capsule Port",
   "block.overpressure.grind_rail": "Wrench Grind Rail",
   "block.overpressure.grind_rail_support": "Grind Rail Support",
   "subtitles.overpressure.grind_collide": "Clank",

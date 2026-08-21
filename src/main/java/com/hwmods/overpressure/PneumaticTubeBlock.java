@@ -439,6 +439,10 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
             return true;
         }
 
+        if (neighborState.getBlock() instanceof CapsulePortBlock) {
+            return CapsulePortBlock.getOutputDirection(neighborState) == directionFromNeighbor;
+        }
+
         if (neighborState.getBlock() instanceof ValveBlock valve) {
             return valve.canTravelTo(neighborState, directionFromNeighbor);
         }
@@ -518,6 +522,7 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
 
         Block neighborBlock = level.getBlockState(pos.relative(direction)).getBlock();
         return neighborBlock instanceof PneumaticConnectionBlock
+                || neighborBlock instanceof CapsulePortBlock
                 || neighborBlock instanceof ValveBlock
                 || neighborBlock instanceof ClogSensorBlock;
     }

@@ -75,6 +75,10 @@ public class OverpressureClient {
                 PneumaticTubeRenderer::new
         );
         event.registerBlockEntityRenderer(
+                ModBlockEntities.CAPSULE_PORT.get(),
+                CapsulePortRenderer::new
+        );
+        event.registerBlockEntityRenderer(
                 ModBlockEntities.GRIND_RAIL.get(),
                 GrindRailRenderer::new
         );
@@ -91,13 +95,24 @@ public class OverpressureClient {
     }
 
     static void modifyBakedModels(ModelEvent.ModifyBakingResult event) {
-        event.getModels().replaceAll((location, model) -> isPneumaticTubeModel(location)
-                ? new PneumaticTubeBracketedModel(model)
-                : model);
+        event.getModels().replaceAll((location, model) -> {
+            if (isPneumaticTubeModel(location)) {
+                return new PneumaticTubeBracketedModel(model);
+            }
+            if (isCapsulePortModel(location)) {
+                return new CapsulePortBakedModel(model);
+            }
+            return model;
+        });
     }
 
     private static boolean isPneumaticTubeModel(ModelResourceLocation location) {
         return location.id().getNamespace().equals(Overpressure.MODID)
                 && location.id().getPath().equals("pneumatic_tube");
+    }
+
+    private static boolean isCapsulePortModel(ModelResourceLocation location) {
+        return location.id().getNamespace().equals(Overpressure.MODID)
+                && location.id().getPath().equals("capsule_port");
     }
 }

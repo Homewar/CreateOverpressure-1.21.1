@@ -18,7 +18,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 public class ItemPumpBlockEntity extends KineticBlockEntity
         implements IHaveGoggleInformation, TransportFlowSource, TransportGate {
-    private static final float RPM_TICK_SCALE = 1024.0f;
+    private static final float RPM_TICK_SCALE = 512.0f;
 
     public ItemPumpBlockEntity(BlockPos pos, BlockState state) {
         this(ModBlockEntities.ITEM_PUMP.get(), pos, state);

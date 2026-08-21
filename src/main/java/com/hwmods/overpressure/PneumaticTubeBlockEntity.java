@@ -38,8 +38,8 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.phys.Vec3;
 
 public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveGoggleInformation {
-    public static final int BASE_MOVE_TIME = 24;
-    public static final int MIN_PUMPED_MOVE_TIME = 4;
+    public static final int BASE_MOVE_TIME = 12;
+    public static final int MIN_PUMPED_MOVE_TIME = 2;
     private static final int SPEED_BAR_SEGMENTS = 18;
     private static final int SPEED_CHECK_INTERVAL = 2;
     private static final float CLIENT_MAX_OWNER_LEAD = 2.0f;

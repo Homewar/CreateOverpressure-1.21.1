@@ -37,6 +37,7 @@ public class ModBlocks {
     public static final DeferredBlock<DeviderBlock> DEVIDER = BLOCKS.register("devider", () -> new DeviderBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.6f).sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<ValveBlock> VALVE = BLOCKS.register("valve", () -> new ValveBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.6f).sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<ClogSensorBlock> CLOG_SENSOR = BLOCKS.register("clog_sensor", () -> new ClogSensorBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.6f).sound(SoundType.METAL).noOcclusion()));
+    public static final DeferredBlock<CapsulePortBlock> CAPSULE_PORT = BLOCKS.register("capsule_port", () -> new CapsulePortBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.8f).sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<GrindRailBlock> GRIND_RAIL = BLOCKS.register("grind_rail", () -> new GrindRailBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.8f).sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<GrindRailSupportBlock> GRIND_RAIL_SUPPORT = BLOCKS.register("grind_rail_support", () -> new GrindRailSupportBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.8f).sound(SoundType.METAL).noOcclusion()));
     public static final DeferredItem<Item> PNEUMATIC_TUBE_ITEM = ITEMS.register("pneumatic_tube", () -> new PneumaticTubeBlockItem(PNEUMATIC_TUBE.get(), new Item.Properties()));
@@ -46,6 +47,7 @@ public class ModBlocks {
     public static final DeferredItem<Item> DEVIDER_ITEM = ITEMS.register("devider", () -> new BlockItem(DEVIDER.get(), new Item.Properties()));
     public static final DeferredItem<Item> VALVE_ITEM = ITEMS.register("valve", () -> new BlockItem(VALVE.get(), new Item.Properties()));
     public static final DeferredItem<Item> CLOG_SENSOR_ITEM = ITEMS.register("clog_sensor", () -> new BlockItem(CLOG_SENSOR.get(), new Item.Properties()));
+    public static final DeferredItem<Item> CAPSULE_PORT_ITEM = ITEMS.register("capsule_port", () -> new BlockItem(CAPSULE_PORT.get(), new Item.Properties()));
     public static final DeferredItem<Item> GRIND_RAIL_ITEM = ITEMS.register("grind_rail", () -> new GrindRailBlockItem(GRIND_RAIL.get(), new Item.Properties()));
     public static final DeferredItem<Item> GRIND_RAIL_SUPPORT_ITEM = ITEMS.register("grind_rail_support", () -> new BlockItem(GRIND_RAIL_SUPPORT.get(), new Item.Properties()));
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> OVERPRESSURE_TAB = CREATIVE_MODE_TABS.register(
@@ -62,6 +64,7 @@ public class ModBlocks {
                         output.accept(DEVIDER_ITEM.get());
                         output.accept(VALVE_ITEM.get());
                         output.accept(CLOG_SENSOR_ITEM.get());
+                        output.accept(CAPSULE_PORT_ITEM.get());
                         output.accept(GRIND_RAIL_ITEM.get());
                         output.accept(GRIND_RAIL_SUPPORT_ITEM.get());
                     })

@@ -86,6 +86,16 @@ public class ModBlockEntities {
                     )
             );
 
+        public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<CapsulePortBlockEntity>> CAPSULE_PORT =
+            BLOCK_ENTITIES.register(
+                    "capsule_port",
+                    () -> new BlockEntityType<>(
+                            CapsulePortBlockEntity::new,
+                            Set.of(ModBlocks.CAPSULE_PORT.get()),
+                            null
+                    )
+            );
+
         public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<GrindRailBlockEntity>> GRIND_RAIL =
             BLOCK_ENTITIES.register(
                     "grind_rail",

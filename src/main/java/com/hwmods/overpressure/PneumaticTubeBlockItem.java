@@ -725,6 +725,10 @@ public class PneumaticTubeBlockItem extends BlockItem {
             return connection.getTubeDirection(level, pos, state) == direction;
         }
 
+        if (state.getBlock() instanceof CapsulePortBlock) {
+            return CapsulePortBlock.getOutputDirection(state) == direction;
+        }
+
         if (state.getBlock() instanceof ItemPumpBlock) {
             return state.getValue(BlockStateProperties.FACING).getAxis() == direction.getAxis();
         }
