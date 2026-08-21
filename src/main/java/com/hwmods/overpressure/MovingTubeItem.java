@@ -5,6 +5,11 @@ import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.ItemStack;
 
+/**
+ * Compatibility snapshot used for NBT, block update packets and rendering.
+ * Server ownership and behavior live in TransitEntry/TubeTransportManager;
+ * this object must never be used as the authoritative cargo model.
+ */
 public class MovingTubeItem {
     public record SpeedController(BlockPos pos) {
     }

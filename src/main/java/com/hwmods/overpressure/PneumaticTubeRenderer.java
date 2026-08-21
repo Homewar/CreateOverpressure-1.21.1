@@ -31,7 +31,7 @@ import net.neoforged.neoforge.client.model.data.ModelData;
 
 public class PneumaticTubeRenderer implements BlockEntityRenderer<PneumaticTubeBlockEntity> {
     private static final float ITEM_SCALE = 0.32f;
-    private static final float CAPSULE_SCALE = 0.88f;
+    private static final float CAPSULE_SCALE = 0.84f;
     private static final TagKey<Item> CREATE_PACKAGES = TagKey.create(
             Registries.ITEM,
             ResourceLocation.fromNamespaceAndPath("create", "packages")
@@ -178,6 +178,11 @@ public class PneumaticTubeRenderer implements BlockEntityRenderer<PneumaticTubeB
             MovingTubeItem item,
             PneumaticTubeBlockEntity.ClientRenderStep step
     ) {
+        Vec3 curveDirection = getCurveCapsuleDirection(tube, item, step);
+        if (curveDirection != null) {
+            return curveDirection;
+        }
+
         float beforeProgress = Math.max(0.0f, step.progress() - 0.01f);
         float afterProgress = Math.min(1.0f, step.progress() + 0.01f);
         Vec3 before = getPathPoint(
@@ -196,6 +201,102 @@ public class PneumaticTubeRenderer implements BlockEntityRenderer<PneumaticTubeB
         );
         Vec3 direction = after.subtract(before);
         return direction.lengthSqr() < 1.0E-6 ? new Vec3(0.0, 0.0, 1.0) : direction.normalize();
+    }
+
+    private static Vec3 getCurveCapsuleDirection(
+            PneumaticTubeBlockEntity tube,
+            MovingTubeItem item,
+            PneumaticTubeBlockEntity.ClientRenderStep step
+    ) {
+        if (tube.getLevel() == null) {
+            return null;
+        }
+
+        BlockPos segmentPos = item.path.get(step.pathIndex());
+        BlockEntity segmentEntity = tube.getLevel().getBlockEntity(segmentPos);
+        if (!(segmentEntity instanceof CurvaturePneumaticTubeEntity curvatureTube)) {
+            return null;
+        }
+
+        boolean reversed = isCurveReversed(tube.getBlockPos(), item, step.pathIndex(), curvatureTube);
+        Float curveProgress = getCurveProgress(tube, item, step, curvatureTube, reversed);
+        if (curveProgress == null) {
+            return null;
+        }
+
+        Vec3 tangent = curvatureTube.getTangent(curveProgress);
+        if (tangent.lengthSqr() < 1.0E-8) {
+            return null;
+        }
+        return reversed ? tangent.scale(-1.0) : tangent;
+    }
+
+    private static Float getCurveProgress(
+            PneumaticTubeBlockEntity tube,
+            MovingTubeItem item,
+            PneumaticTubeBlockEntity.ClientRenderStep step,
+            CurvaturePneumaticTubeEntity curvatureTube,
+            boolean reversed
+    ) {
+        if (item.sourceConnector == null || step.pathIndex() != item.startPathIndex) {
+            return reversed ? 1.0f - step.progress() : step.progress();
+        }
+
+        List<Vec3> prefix = new ArrayList<>();
+        addSourcePrefix(prefix, tube.getBlockPos(), item, step.pathIndex());
+        if (prefix.isEmpty()) {
+            return reversed ? 1.0f - step.progress() : step.progress();
+        }
+
+        Vec3 curveOffset = Vec3.atLowerCornerOf(
+                curvatureTube.getBlockPos().subtract(tube.getBlockPos())
+        );
+        Vec3 curveStart = curveOffset.add(curvatureTube.getPoint(reversed ? 1.0f : 0.0f));
+        double ingressLength = getPathLength(prefix)
+                + prefix.get(prefix.size() - 1).distanceTo(curveStart);
+
+        List<Vec3> curveSamples = new ArrayList<>();
+        curveSamples.add(curveStart);
+        for (int sample = 1; sample <= 12; sample++) {
+            float traversalProgress = sample / 12.0f;
+            float sampleProgress = reversed ? 1.0f - traversalProgress : traversalProgress;
+            curveSamples.add(curveOffset.add(curvatureTube.getPoint(sampleProgress)));
+        }
+
+        double curveLength = getPathLength(curveSamples);
+        double totalLength = ingressLength + curveLength;
+        if (totalLength < 1.0E-6) {
+            return reversed ? 1.0f : 0.0f;
+        }
+
+        double traveledDistance = Math.max(0.0, Math.min(1.0, step.progress())) * totalLength;
+        if (traveledDistance + 1.0E-6 < ingressLength) {
+            return null;
+        }
+
+        double curveDistance = Math.max(0.0, Math.min(curveLength, traveledDistance - ingressLength));
+        Vec3 previous = curveSamples.get(0);
+        for (int sample = 1; sample < curveSamples.size(); sample++) {
+            Vec3 next = curveSamples.get(sample);
+            double sampleLength = previous.distanceTo(next);
+            if (curveDistance <= sampleLength || sample == curveSamples.size() - 1) {
+                double sampleProgress = sampleLength < 1.0E-6 ? 1.0 : curveDistance / sampleLength;
+                float traversalProgress = (float) ((sample - 1 + sampleProgress) / 12.0);
+                return reversed ? 1.0f - traversalProgress : traversalProgress;
+            }
+            curveDistance -= sampleLength;
+            previous = next;
+        }
+
+        return reversed ? 0.0f : 1.0f;
+    }
+
+    private static double getPathLength(List<Vec3> points) {
+        double length = 0.0;
+        for (int pointIndex = 1; pointIndex < points.size(); pointIndex++) {
+            length += points.get(pointIndex - 1).distanceTo(points.get(pointIndex));
+        }
+        return length;
     }
 
     private static void rotateCapsule(PoseStack poseStack, Vec3 direction) {

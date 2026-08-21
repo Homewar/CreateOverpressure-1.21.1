@@ -1,6 +1,7 @@
 package com.hwmods.overpressure;
 
 import com.mojang.logging.LogUtils;
+import com.hwmods.overpressure.compat.create.PneumaticConnectionArmInteractionPoint;
 import com.simibubi.create.api.stress.BlockStressValues;
 import com.simibubi.create.content.decoration.encasing.EncasingRegistry;
 
@@ -23,6 +24,7 @@ public class Overpressure {
         ModBlockEntities.BLOCK_ENTITIES.register(modBus);
         ModSoundEvents.SOUND_EVENTS.register(modBus);
         ModParticleTypes.PARTICLE_TYPES.register(modBus);
+        modBus.addListener(PneumaticConnectionArmInteractionPoint::register);
         modBus.addListener(this::commonSetup);
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
     }

@@ -21,10 +21,6 @@ public class CurvaturePneumaticTubeEntity extends PneumaticTubeBlockEntity {
         super(ModBlockEntities.CURVATURE_PNEUMATIC_TUBE.get(), pos, blockState);
     }
 
-    public static void serverTick(Level level, BlockPos pos, BlockState state, CurvaturePneumaticTubeEntity tube) {
-        PneumaticTubeBlockEntity.serverTick(level, pos, state, tube);
-    }
-
     @Override
     public boolean canTravelTo(Level level, Direction direction) {
         BlockState state = getBlockState();
@@ -78,6 +74,15 @@ public class CurvaturePneumaticTubeEntity extends PneumaticTubeBlockEntity {
                 .add(p1.scale(3.0 * uu * t))
                 .add(p2.scale(3.0 * u * tt))
                 .add(p3.scale(tt * t));
+    }
+
+    public Vec3 getTangent(float t) {
+        double clampedT = Math.max(0.0, Math.min(1.0, t));
+        double u = 1.0 - clampedT;
+        Vec3 tangent = p1.subtract(p0).scale(3.0 * u * u)
+                .add(p2.subtract(p1).scale(6.0 * u * clampedT))
+                .add(p3.subtract(p2).scale(3.0 * clampedT * clampedT));
+        return tangent.lengthSqr() < 1.0E-8 ? Vec3.ZERO : tangent.normalize();
     }
 
     public Vec3 getP0() {

@@ -5,6 +5,9 @@ import java.util.List;
 import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
+import com.hwmods.overpressure.transport.TransportFlowSource;
+import com.hwmods.overpressure.transport.TransportGate;
+import com.hwmods.overpressure.transport.TubeGraphRoute;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -13,7 +16,8 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 
-public class ItemPumpBlockEntity extends KineticBlockEntity implements IHaveGoggleInformation {
+public class ItemPumpBlockEntity extends KineticBlockEntity
+        implements IHaveGoggleInformation, TransportFlowSource, TransportGate {
     private static final float RPM_TICK_SCALE = 1024.0f;
 
     public ItemPumpBlockEntity(BlockPos pos, BlockState state) {
@@ -75,11 +79,27 @@ public class ItemPumpBlockEntity extends KineticBlockEntity implements IHaveGogg
         return getBlockState().is(ModBlocks.CREATIVE_ITEM_PUMP.get());
     }
 
+    @Override
+    public TubeGraphRoute.NodeKind graphNodeKind() {
+        return TubeGraphRoute.NodeKind.PUMP;
+    }
+
     public boolean canTravelTo(Level level, Direction direction) {
         if (!(getBlockState().getBlock() instanceof ItemPumpBlock pump)) {
             return false;
         }
 
         return pump.canTravelTo(getBlockState(), direction);
+    }
+
+    @Override
+    public boolean allowsRoute(Level level, Direction travelDirection) {
+        return getBlockState().getBlock() instanceof ItemPumpBlock pump
+                && pump.allowsTravel(level, worldPosition, getBlockState(), travelDirection);
+    }
+
+    @Override
+    public boolean allowsTravelNow(Level level, Direction travelDirection) {
+        return allowsRoute(level, travelDirection);
     }
 }

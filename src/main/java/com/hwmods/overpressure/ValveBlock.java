@@ -10,7 +10,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 
@@ -29,11 +28,6 @@ public class ValveBlock extends AbstractInlineTubeBlock {
     @Override
     protected boolean getPoweredStateForPlacement(BlockPlaceContext context) {
         return context.getLevel().hasNeighborSignal(context.getClickedPos());
-    }
-
-    @Override
-    protected BlockEntityType<? extends PneumaticTubeBlockEntity> getInlineBlockEntityType() {
-        return ModBlockEntities.VALVE.get();
     }
 
     public boolean allowsTravel(BlockState state, Direction movementDirection) {

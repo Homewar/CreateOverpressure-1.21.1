@@ -251,14 +251,6 @@ public class CurvaturePneumaticTubeBlock extends PneumaticTubeBlock {
             BlockState state,
             BlockEntityType<T> type
     ) {
-        if (level.isClientSide) {
-            return null;
-        }
-
-        return createTickerHelper(
-                type,
-                ModBlockEntities.CURVATURE_PNEUMATIC_TUBE.get(),
-                CurvaturePneumaticTubeEntity::serverTick
-        );
+        return null;
     }
 }

@@ -1,5 +1,10 @@
 package com.hwmods.overpressure;
 
+import com.hwmods.overpressure.transport.TransportNodeComponent;
+import com.hwmods.overpressure.transport.TransportJunction;
+import com.hwmods.overpressure.transport.TransportGate;
+import com.hwmods.overpressure.transport.TransportEndpoint;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
@@ -12,7 +17,9 @@ import java.util.List;
 public final class PneumaticLine {
     public static boolean isPathNode(Level level, BlockPos pos) {
         BlockState state = level.getBlockState(pos);
-        return state.getBlock() instanceof PneumaticTubeBlock
+        BlockEntity blockEntity = level.getBlockEntity(pos);
+        return (blockEntity instanceof TransportNodeComponent node && node.participatesInPath())
+                || state.getBlock() instanceof PneumaticTubeBlock
                 || state.getBlock() instanceof ItemPumpBlock
                 || state.getBlock() instanceof ValveBlock
                 || state.getBlock() instanceof ClogSensorBlock
@@ -21,8 +28,8 @@ public final class PneumaticLine {
 
     public static List<BlockPos> getForwardNeighbors(Level level, BlockPos pos) {
         BlockEntity blockEntity = level.getBlockEntity(pos);
-        if (blockEntity instanceof DeviderBlockEntity devider) {
-            return devider.getConnectedPortPositions();
+        if (blockEntity instanceof TransportJunction junction) {
+            return junction.connectedPorts();
         }
 
         List<BlockPos> neighbors = new ArrayList<>(Direction.values().length);
@@ -34,8 +41,8 @@ public final class PneumaticLine {
 
     public static List<BlockPos> getForwardNeighbors(Level level, BlockPos pos, BlockPos previousPos) {
         BlockEntity blockEntity = level.getBlockEntity(pos);
-        if (blockEntity instanceof DeviderBlockEntity devider) {
-            return devider.getForwardPositions(previousPos);
+        if (blockEntity instanceof TransportJunction junction) {
+            return junction.forwardPorts(previousPos);
         }
         return getForwardNeighbors(level, pos);
     }
@@ -63,34 +70,34 @@ public final class PneumaticLine {
         BlockEntity fromBlockEntity = level.getBlockEntity(from);
         BlockEntity toBlockEntity = level.getBlockEntity(to);
 
-        if (fromBlockEntity instanceof DeviderBlockEntity devider) {
+        if (fromBlockEntity instanceof TransportJunction junction) {
             Direction movementDirection = getDirectionBetween(from, to);
             if (movementDirection == null
                     || !componentAllowsMovement(level, to, movementDirection, respectValvePower)) {
                 return false;
             }
-            if (devider.isStraightPosition(to)) {
-                return devider.getJunctionRole() == DeviderBlockEntity.JunctionRole.MERGER
+            if (junction.isStraightPort(to)) {
+                return junction.isMerger()
                         && (toBlockEntity instanceof PneumaticTubeBlockEntity
-                        || toBlockEntity instanceof ItemPumpBlockEntity);
+                        || (toBlockEntity instanceof TransportNodeComponent node && !node.hasCargoSlot()));
             }
-            return devider.isBranchOutputEnabled(to)
+            return junction.isBranchOutputEnabled(to)
                     && level.getBlockState(to).getBlock() instanceof CurvaturePneumaticTubeBlock
                     && toBlockEntity instanceof PneumaticTubeBlockEntity;
         }
 
-        if (toBlockEntity instanceof DeviderBlockEntity devider) {
+        if (toBlockEntity instanceof TransportJunction junction) {
             Direction movementDirection = getDirectionBetween(from, to);
             if (movementDirection == null
                     || !componentAllowsMovement(level, from, movementDirection, respectValvePower)) {
                 return false;
             }
-            if (devider.isStraightPosition(from)) {
-                return devider.getJunctionRole() == DeviderBlockEntity.JunctionRole.DIVIDER
+            if (junction.isStraightPort(from)) {
+                return !junction.isMerger()
                         && (fromBlockEntity instanceof PneumaticTubeBlockEntity
-                        || fromBlockEntity instanceof ItemPumpBlockEntity);
+                        || (fromBlockEntity instanceof TransportNodeComponent node && !node.hasCargoSlot()));
             }
-            return devider.isBranchInputEnabled(from)
+            return junction.isBranchInputEnabled(from)
                     && level.getBlockState(from).getBlock() instanceof CurvaturePneumaticTubeBlock
                     && fromBlockEntity instanceof PneumaticTubeBlockEntity;
         }
@@ -111,14 +118,14 @@ public final class PneumaticLine {
             Direction movementDirection,
             boolean respectValvePower
     ) {
-        BlockState state = level.getBlockState(pos);
-        if (state.getBlock() instanceof ItemPumpBlock pump) {
-            return pump.allowsTravel(level, pos, state, movementDirection);
+        BlockEntity blockEntity = level.getBlockEntity(pos);
+        if (blockEntity instanceof TransportEndpoint endpoint) {
+            return endpoint.allowsRoute(level, movementDirection);
         }
-        if (state.getBlock() instanceof ValveBlock valve) {
+        if (blockEntity instanceof TransportGate gate) {
             return respectValvePower
-                    ? valve.allowsTravel(state, movementDirection)
-                    : valve.canTravelTo(state, movementDirection);
+                    ? gate.allowsTravelNow(level, movementDirection)
+                    : gate.allowsRoute(level, movementDirection);
         }
         return true;
     }
@@ -158,22 +165,12 @@ public final class PneumaticLine {
         BlockEntity fromBlockEntity = level.getBlockEntity(from);
         BlockEntity toBlockEntity = level.getBlockEntity(to);
 
-        if (fromBlockEntity instanceof ItemPumpBlockEntity fromPump
-                && !fromPump.canTravelTo(level, direction)) {
-            return false;
-        }
-
         if (!componentAllowsMovement(level, from, direction, respectValvePower)) {
             return false;
         }
 
         if (fromBlockEntity instanceof PneumaticTubeBlockEntity fromTube
                 && !fromTube.canTravelTo(level, direction)) {
-            return false;
-        }
-
-        if (toBlockEntity instanceof ItemPumpBlockEntity toPump
-                && !toPump.canTravelTo(level, direction.getOpposite())) {
             return false;
         }
 
@@ -187,8 +184,8 @@ public final class PneumaticLine {
         }
 
         return fromBlockEntity instanceof PneumaticTubeBlockEntity
-                || fromBlockEntity instanceof ItemPumpBlockEntity
-                || level.getBlockState(from).getBlock() instanceof PneumaticConnectionBlock;
+                || (fromBlockEntity instanceof TransportNodeComponent node && node.participatesInPath())
+                || fromBlockEntity instanceof TransportEndpoint;
     }
 
     private PneumaticLine() {

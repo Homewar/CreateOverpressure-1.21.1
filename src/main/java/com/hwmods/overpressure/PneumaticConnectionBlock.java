@@ -257,7 +257,9 @@ public class PneumaticConnectionBlock extends BaseEntityBlock implements IWrench
 
         if (backHasTube && frontHasInventory) {
             mode = ConnectionMode.INSERT;
-        } else if (frontHasTube && backHasInventory) {
+        } else if (frontHasTube && (backHasInventory || !backHasTube)) {
+            // A connector with a tube outlet but no inventory is a direct
+            // package destination for a configured Create mechanical arm.
             mode = ConnectionMode.EXTRACT;
         }
 

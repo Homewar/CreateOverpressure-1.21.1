@@ -176,15 +176,7 @@ public class DeviderBlock extends BaseEntityBlock implements IWrenchable {
             BlockState state,
             BlockEntityType<T> type
     ) {
-        if (level.isClientSide) {
-            return null;
-        }
-
-        return createTickerHelper(
-                type,
-                ModBlockEntities.DEVIDER.get(),
-                PneumaticTubeBlockEntity::serverTick
-        );
+        return null;
     }
 
     private static VoxelShape createModelShape(boolean rotateToZ) {

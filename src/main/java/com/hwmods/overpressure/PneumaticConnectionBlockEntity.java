@@ -3,7 +3,10 @@ package com.hwmods.overpressure;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import com.simibubi.create.foundation.blockEntity.behaviour.filtering.FilteringBehaviour;
+import com.simibubi.create.content.logistics.box.PackageItem;
 import com.simibubi.create.content.logistics.packager.PackagerBlockEntity;
+import com.hwmods.overpressure.transport.TransportEndpoint;
+import com.hwmods.overpressure.transport.TubeGraphRoute;
 
 import javax.annotation.Nullable;
 
@@ -18,7 +21,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.items.IItemHandler;
 
-public class PneumaticConnectionBlockEntity extends SmartBlockEntity {
+public class PneumaticConnectionBlockEntity extends SmartBlockEntity implements TransportEndpoint {
     private static final int TRANSFER_COOLDOWN = 5;
     private FilteringBehaviour filtering;
 
@@ -30,7 +33,7 @@ public class PneumaticConnectionBlockEntity extends SmartBlockEntity {
     public void addBehaviours(java.util.List<BlockEntityBehaviour> behaviours) {
         filtering = new FilteringBehaviour(this, new PneumaticConnectionFilterSlot())
                 .onlyActiveWhen(() -> getBlockState().getValue(PneumaticConnectionBlock.MODE)
-                        == PneumaticConnectionBlock.ConnectionMode.EXTRACT);
+                        != PneumaticConnectionBlock.ConnectionMode.INSERT);
         behaviours.add(filtering);
     }
 
@@ -95,6 +98,55 @@ public class PneumaticConnectionBlockEntity extends SmartBlockEntity {
         setChanged();
     }
 
+    /**
+     * Create arm output. Package filters use Create's own address matcher, so
+     * wildcard and blank-address behavior stays identical to other logistics blocks.
+     */
+    public ItemStack insertFromArm(ItemStack stack, boolean simulate) {
+        if (level == null
+                || level.isClientSide
+                || stack.isEmpty()
+                || !PackageItem.isPackage(stack)
+                || getBlockState().getValue(PneumaticConnectionBlock.MODE)
+                != PneumaticConnectionBlock.ConnectionMode.EXTRACT
+                || getBlockState().getValue(PneumaticConnectionBlock.POWERED)
+                || filtering == null
+                || !filtering.test(stack)) {
+            return stack;
+        }
+
+        Direction facing = getBlockState().getValue(PneumaticConnectionBlock.FACING);
+        BlockPos firstTubePos = worldPosition.relative(facing);
+        if (!PneumaticLine.isPathNode(level, firstTubePos)) {
+            return stack;
+        }
+
+        TubePath path = TubeNetworkPathfinder.findPathToInsertConnector(level, worldPosition, firstTubePos);
+        if (path.isEmpty()) {
+            return stack;
+        }
+
+        PneumaticTubeBlockEntity firstTube = findFirstTubeOnPath(level, path);
+        ItemStack capsule = stack.copyWithCount(1);
+        if (firstTube == null || !firstTube.canAcceptItem(capsule, path)) {
+            return stack;
+        }
+
+        ItemStack remainder = stack.copy();
+        remainder.shrink(1);
+        if (simulate) {
+            return remainder;
+        }
+
+        if (!firstTube.acceptItem(capsule, path, worldPosition)) {
+            return stack;
+        }
+
+        TubeNetworkPathfinder.commitDeviderChoices(level, path);
+        setChanged();
+        return remainder;
+    }
+
     @Nullable
     private PneumaticTubeBlockEntity findFirstTubeOnPath(Level level, TubePath path) {
         for (BlockPos pathPos : path.tubePositions()) {
@@ -123,6 +175,38 @@ public class PneumaticConnectionBlockEntity extends SmartBlockEntity {
         ItemStack remaining = insertItem(target.handler(), stack);
         setChanged();
         return remaining;
+    }
+
+    @Override
+    public ItemStack insertCargo(Level level, ItemStack stack) {
+        return insertIntoAttachedInventory(level, stack);
+    }
+
+    @Override
+    public boolean canReceiveFrom(Level level, BlockPos sourcePos) {
+        BlockState state = getBlockState();
+        if (state.getValue(PneumaticConnectionBlock.MODE)
+                != PneumaticConnectionBlock.ConnectionMode.INSERT) {
+            return false;
+        }
+        Direction direction = Direction.getNearest(
+                worldPosition.getX() - sourcePos.getX(),
+                worldPosition.getY() - sourcePos.getY(),
+                worldPosition.getZ() - sourcePos.getZ()
+        );
+        return state.getValue(PneumaticConnectionBlock.FACING) == direction
+                && level.getBlockEntity(sourcePos) instanceof PneumaticTubeBlockEntity tube
+                && tube.canTravelTo(level, direction);
+    }
+
+    @Override
+    public boolean allowsRoute(Level level, Direction travelDirection) {
+        BlockState state = getBlockState();
+        if (state.getValue(PneumaticConnectionBlock.MODE)
+                == PneumaticConnectionBlock.ConnectionMode.DISABLED) {
+            return false;
+        }
+        return state.getValue(PneumaticConnectionBlock.FACING) == travelDirection;
     }
 
     @Nullable
@@ -162,6 +246,14 @@ public class PneumaticConnectionBlockEntity extends SmartBlockEntity {
         return filtering.getFilter();
     }
 
+    public boolean hasRoutingFilter() {
+        return filtering != null && !filtering.getFilter().isEmpty();
+    }
+
+    public boolean routingFilterMatches(ItemStack stack) {
+        return filtering != null && filtering.test(stack);
+    }
+
     public void setFilter(ItemStack filter) {
         filtering.setFilter(filter);
     }
@@ -172,6 +264,12 @@ public class PneumaticConnectionBlockEntity extends SmartBlockEntity {
 
         return removed;
     }
+
+    @Override
+    public TubeGraphRoute.NodeKind graphNodeKind() {
+        return TubeGraphRoute.NodeKind.CONNECTOR;
+    }
+
 
     private ItemStack extractItems(Level level, IItemHandler handler, boolean simulate) {
         for (int slot = 0; slot < handler.getSlots(); slot++) {

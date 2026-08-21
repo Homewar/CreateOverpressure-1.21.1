@@ -544,15 +544,7 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
             BlockState state, 
             BlockEntityType<T> type
     ) {
-        if (level.isClientSide) {
-            return null;
-        }
-
-        return createTickerHelper(
-            type,
-            ModBlockEntities.PNEUMATIC_TUBE.get(),
-            PneumaticTubeBlockEntity::serverTick
-        );
+        return null;
     }
 
 }

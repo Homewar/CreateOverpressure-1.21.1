@@ -44,8 +44,12 @@ public class PneumaticTubeBlockItem extends BlockItem {
     private static final int CURVE_SAMPLES_PER_BLOCK = 12;
     private static final int MIN_CURVE_SAMPLES = 24;
     private static final int CURVATURE_CHECK_SAMPLES = 32;
+    private static final int CURVE_SEGMENT_TURN_CHECK_SAMPLES = 16;
     private static final double MIN_CURVATURE_RADIUS = 0.55;
     private static final double MAX_SECOND_DERIVATIVE = 36.0;
+    private static final double MAX_CURVE_SEGMENT_TURN_DEGREES = 60.0;
+    private static final String CURVE_SEGMENT_TOO_SHARP_MESSAGE =
+            "Tube curve cannot turn more than 60 degrees inside one block";
     private final int placementHelperId;
 
     public PneumaticTubeBlockItem(Block block, Properties properties) {
@@ -318,7 +322,17 @@ public class PneumaticTubeBlockItem extends BlockItem {
 
         List<PlacedTube> tubes = buildPlacedTubes(start, startPos, end, endPos);
 
-        if (tubes.isEmpty() || !canPlaceAll(level, tubes)) {
+        if (tubes.isEmpty()) {
+            player.displayClientMessage(Component.literal("Tube section is blocked"), true);
+            return false;
+        }
+
+        if (!areCurveSegmentsWithinTurnLimit(tubes)) {
+            player.displayClientMessage(Component.literal(CURVE_SEGMENT_TOO_SHARP_MESSAGE), true);
+            return false;
+        }
+
+        if (!canPlaceAll(level, tubes)) {
             player.displayClientMessage(Component.literal("Tube section is blocked"), true);
             return false;
         }
@@ -662,6 +676,18 @@ public class PneumaticTubeBlockItem extends BlockItem {
                 MIN_CURVATURE_RADIUS,
                 MAX_SECOND_DERIVATIVE
         );
+    }
+
+    private boolean areCurveSegmentsWithinTurnLimit(List<PlacedTube> tubes) {
+        for (PlacedTube tube : tubes) {
+            if (tube.bezier != null && !tube.bezier.satisfiesTurnAngleLimit(
+                    CURVE_SEGMENT_TURN_CHECK_SAMPLES,
+                    MAX_CURVE_SEGMENT_TURN_DEGREES
+            )) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void applyBezierCurve(Level level, PlacedTube tube, UUID sectionId) {
@@ -1030,6 +1056,10 @@ public class PneumaticTubeBlockItem extends BlockItem {
 
         if (tubes.isEmpty()) {
             return new PlanResult(List.of(), "Invalid tube layout");
+        }
+
+        if (!areCurveSegmentsWithinTurnLimit(tubes)) {
+            return new PlanResult(List.of(), CURVE_SEGMENT_TOO_SHARP_MESSAGE);
         }
 
         boolean blocked = !canPlaceAll(level, tubes);

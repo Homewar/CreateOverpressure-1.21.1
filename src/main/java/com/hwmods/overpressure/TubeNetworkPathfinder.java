@@ -11,10 +11,15 @@ import java.util.Queue;
 
 import javax.annotation.Nullable;
 
+import com.hwmods.overpressure.transport.TransportJunction;
+import com.hwmods.overpressure.transport.TubeTransportManager;
+import com.hwmods.overpressure.transport.TransportGate;
+import com.hwmods.overpressure.transport.TransportEndpoint;
+import com.hwmods.overpressure.transport.TransportNodeComponent;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.state.BlockState;
 
 public final class TubeNetworkPathfinder {
     public static TubePath findPathToInsertConnector(Level level, BlockPos sourceConnector, BlockPos firstTube) {
@@ -105,14 +110,13 @@ public final class TubeNetworkPathfinder {
 
             Direction forward = previousPos == null ? null : getDirectionBetween(previousPos, current);
             if (forward != null
-                    && !(level.getBlockEntity(current) instanceof DeviderBlockEntity)
+                    && !(level.getBlockEntity(current) instanceof TransportJunction)
                     && !hasConnectedContinuation(level, current, previousPos)) {
                 BlockPos possibleSpillTarget = current.relative(forward);
                 List<BlockPos> possibleSpillPath = buildPath(previous, sourceConnector, current);
 
                 if (!isPathNode(level, possibleSpillTarget)
-                        && !(level.getBlockState(possibleSpillTarget).getBlock()
-                        instanceof PneumaticConnectionBlock)
+                        && !(level.getBlockEntity(possibleSpillTarget) instanceof TransportEndpoint)
                         && possibleSpillPath.size() > spillPath.size()) {
                     spillPath = possibleSpillPath;
                     spillTarget = possibleSpillTarget;
@@ -173,8 +177,8 @@ public final class TubeNetworkPathfinder {
 
     private static boolean containsMergerPassage(Level level, List<BlockPos> path) {
         for (int index = 1; index + 1 < path.size(); index++) {
-            if (level.getBlockEntity(path.get(index)) instanceof DeviderBlockEntity devider
-                    && devider.isMergerPassage(path.get(index - 1), path.get(index + 1))) {
+            if (level.getBlockEntity(path.get(index)) instanceof TransportJunction junction
+                    && junction.isMergerPassage(path.get(index - 1), path.get(index + 1))) {
                 return true;
             }
         }
@@ -182,15 +186,15 @@ public final class TubeNetworkPathfinder {
     }
 
     private static List<BlockPos> getSearchNeighbors(Level level, BlockPos current, BlockPos previous) {
-        if (!(level.getBlockEntity(current) instanceof DeviderBlockEntity devider) || previous == null) {
+        if (!(level.getBlockEntity(current) instanceof TransportJunction junction) || previous == null) {
             return PneumaticLine.getForwardNeighbors(level, current, previous);
         }
 
-        if (devider.isStraightPosition(previous)) {
-            return devider.getOrderedBranchPositions();
+        if (junction.isStraightPort(previous)) {
+            return junction.orderedBranchPorts();
         }
-        if (devider.isBranchPosition(previous)) {
-            return List.of(devider.getStraightPosition());
+        if (junction.isBranchPort(previous)) {
+            return List.of(junction.straightPort());
         }
         return List.of();
     }
@@ -201,29 +205,30 @@ public final class TubeNetworkPathfinder {
             @Nullable BlockPos previous,
             BlockPos next
     ) {
-        if (level.getBlockEntity(next) instanceof DeviderBlockEntity devider) {
-            return isUsableJunctionPort(level, devider, current);
+        if (level.getBlockEntity(next) instanceof TransportJunction junction) {
+            return isUsableJunctionPort(level, junction, current);
         }
 
-        if (!(level.getBlockEntity(current) instanceof DeviderBlockEntity devider) || previous == null) {
+        if (!(level.getBlockEntity(current) instanceof TransportJunction junction) || previous == null) {
             return false;
         }
 
-        boolean dividerPassage = devider.isStraightPosition(previous)
-                && devider.isBranchPosition(next);
-        boolean mergerPassage = devider.isBranchPosition(previous)
-                && devider.isStraightPosition(next);
+        boolean dividerPassage = junction.isStraightPort(previous)
+                && junction.isBranchPort(next);
+        boolean mergerPassage = junction.isBranchPort(previous)
+                && junction.isStraightPort(next);
         return (dividerPassage || mergerPassage)
-                && isUsableJunctionPort(level, devider, previous)
-                && isUsableJunctionPort(level, devider, next);
+                && isUsableJunctionPort(level, junction, previous)
+                && isUsableJunctionPort(level, junction, next);
     }
 
-    private static boolean isUsableJunctionPort(Level level, DeviderBlockEntity devider, BlockPos portPos) {
-        if (devider.isStraightPosition(portPos)) {
+    private static boolean isUsableJunctionPort(Level level, TransportJunction junction, BlockPos portPos) {
+        if (junction.isStraightPort(portPos)) {
             return level.getBlockEntity(portPos) instanceof PneumaticTubeBlockEntity
-                    || level.getBlockEntity(portPos) instanceof ItemPumpBlockEntity;
+                    || (level.getBlockEntity(portPos) instanceof TransportNodeComponent node
+                    && !node.hasCargoSlot());
         }
-        return devider.isBranchPosition(portPos)
+        return junction.isBranchPort(portPos)
                 && level.getBlockState(portPos).getBlock() instanceof CurvaturePneumaticTubeBlock
                 && level.getBlockEntity(portPos) instanceof PneumaticTubeBlockEntity;
     }
@@ -234,14 +239,14 @@ public final class TubeNetworkPathfinder {
             BlockPos deviderPos,
             BlockPos previousPos
     ) {
-        if (!(level.getBlockEntity(deviderPos) instanceof DeviderBlockEntity devider)
-                || !devider.isStraightPosition(previousPos)) {
+        if (!(level.getBlockEntity(deviderPos) instanceof TransportJunction junction)
+                || !junction.isStraightPort(previousPos)) {
             return null;
         }
 
-        BlockPos preferredBranch = devider.getOrderedBranchPositions().get(0);
+        BlockPos preferredBranch = junction.orderedBranchPorts().get(0);
         if (!(level.getBlockEntity(preferredBranch) instanceof PneumaticTubeBlockEntity branchTube)
-                || branchTube.getMovingItem() == null) {
+                || !TubeTransportManager.get(level).isOccupied(preferredBranch)) {
             return null;
         }
 
@@ -269,11 +274,11 @@ public final class TubeNetworkPathfinder {
             BlockPos previous,
             BlockPos to
     ) {
-        if (!(level.getBlockEntity(from) instanceof DeviderBlockEntity devider)
-                || !devider.isStraightPosition(previous)) {
+        if (!(level.getBlockEntity(from) instanceof TransportJunction junction)
+                || !junction.isStraightPort(previous)) {
             return 0;
         }
-        return to.equals(devider.getOrderedBranchPositions().get(0)) ? 0 : 1;
+        return to.equals(junction.orderedBranchPorts().get(0)) ? 0 : 1;
     }
 
     private static int compareScores(RouteScore first, RouteScore second) {
@@ -294,14 +299,10 @@ public final class TubeNetworkPathfinder {
                 continue;
             }
 
-            BlockState state = level.getBlockState(neighborPos);
-
-            if (!(state.getBlock() instanceof PneumaticConnectionBlock)) {
+            if (!(level.getBlockEntity(neighborPos) instanceof TransportEndpoint endpoint)) {
                 continue;
             }
-
-            PneumaticConnectionBlock.ConnectionMode mode = state.getValue(PneumaticConnectionBlock.MODE);
-            if (mode == PneumaticConnectionBlock.ConnectionMode.INSERT
+            if (endpoint.canReceiveFrom(level, pos)
                     && canTravelBetween(level, pos, neighborPos, direction)) {
                 return neighborPos;
             }
@@ -324,7 +325,7 @@ public final class TubeNetworkPathfinder {
 
         BlockPos candidate = current.relative(forward);
         if (candidate.equals(ignoredConnector)
-                || !(level.getBlockState(candidate).getBlock() instanceof PneumaticConnectionBlock)) {
+                || !(level.getBlockEntity(candidate) instanceof TransportEndpoint)) {
             return null;
         }
 
@@ -332,8 +333,8 @@ public final class TubeNetworkPathfinder {
     }
 
     private static boolean isOccupiedTube(Level level, BlockPos pos) {
-        return level.getBlockEntity(pos) instanceof PneumaticTubeBlockEntity tube
-                && tube.getMovingItem() != null;
+        return level.getBlockEntity(pos) instanceof PneumaticTubeBlockEntity
+                && TubeTransportManager.get(level).isOccupied(pos);
     }
 
     private static List<BlockPos> buildPath(Map<BlockPos, BlockPos> previous, BlockPos start, BlockPos end) {
@@ -359,13 +360,8 @@ public final class TubeNetworkPathfinder {
             return false;
         }
 
-        if (!pumpAllowsMovement(level, from, movementDirection)
-                || !pumpAllowsMovement(level, to, movementDirection)) {
-            return false;
-        }
-
-        if (!valveAllowsMovement(level, from, movementDirection)
-                || !valveAllowsMovement(level, to, movementDirection)) {
+        if (!gateAllowsRoute(level, from, movementDirection)
+                || !gateAllowsRoute(level, to, movementDirection)) {
             return false;
         }
 
@@ -379,7 +375,7 @@ public final class TubeNetworkPathfinder {
             return PneumaticLine.isRouteAllowed(level, from, to, movementDirection);
         }
 
-        if (level.getBlockState(to).getBlock() instanceof PneumaticConnectionBlock) {
+        if (level.getBlockEntity(to) instanceof TransportEndpoint) {
             return strictTubeEndpointAllowsMovement(level, from, movementDirection);
         }
 
@@ -387,8 +383,8 @@ public final class TubeNetworkPathfinder {
     }
 
     private static boolean canTravelBetween(Level level, BlockPos from, BlockPos to) {
-        if (level.getBlockEntity(from) instanceof DeviderBlockEntity
-                || level.getBlockEntity(to) instanceof DeviderBlockEntity) {
+        if (level.getBlockEntity(from) instanceof TransportJunction
+                || level.getBlockEntity(to) instanceof TransportJunction) {
             return PneumaticLine.isRouteAllowed(level, from, to);
         }
 
@@ -402,10 +398,10 @@ public final class TubeNetworkPathfinder {
     public static void commitDeviderChoices(Level level, TubePath path) {
         List<BlockPos> positions = path.tubePositions();
         for (int index = 1; index + 1 < positions.size(); index++) {
-            if (level.getBlockEntity(positions.get(index)) instanceof DeviderBlockEntity devider
-                    && devider.isStraightPosition(positions.get(index - 1))
-                    && devider.isBranchPosition(positions.get(index + 1))) {
-                devider.markBranchUsed(positions.get(index + 1));
+            if (level.getBlockEntity(positions.get(index)) instanceof TransportJunction junction
+                    && junction.isStraightPort(positions.get(index - 1))
+                    && junction.isBranchPort(positions.get(index + 1))) {
+                junction.markBranchUsed(positions.get(index + 1));
             }
         }
     }
@@ -415,43 +411,25 @@ public final class TubeNetworkPathfinder {
             return tube.canTravelTo(level, movementDirection);
         }
 
-        if (level.getBlockEntity(pos) instanceof ItemPumpBlockEntity pump) {
-            return pump.canTravelTo(level, movementDirection);
+        if (level.getBlockEntity(pos) instanceof TransportGate gate) {
+            return gate.allowsRoute(level, movementDirection);
         }
 
         return true;
     }
 
     private static boolean connectorAllowsMovement(Level level, BlockPos pos, Direction movementDirection) {
-        BlockState state = level.getBlockState(pos);
-
-        if (!(state.getBlock() instanceof PneumaticConnectionBlock)) {
+        if (!(level.getBlockEntity(pos) instanceof TransportEndpoint endpoint)) {
             return true;
         }
-
-        PneumaticConnectionBlock.ConnectionMode mode = state.getValue(PneumaticConnectionBlock.MODE);
-        Direction facing = state.getValue(PneumaticConnectionBlock.FACING);
-        return switch (mode) {
-            case INSERT -> facing == movementDirection;
-            case EXTRACT -> facing == movementDirection;
-            case DISABLED -> false;
-        };
+        return endpoint.allowsRoute(level, movementDirection);
     }
 
-    private static boolean pumpAllowsMovement(Level level, BlockPos pos, Direction movementDirection) {
-        BlockState state = level.getBlockState(pos);
-
-        if (!(state.getBlock() instanceof ItemPumpBlock pump)) {
+    private static boolean gateAllowsRoute(Level level, BlockPos pos, Direction movementDirection) {
+        if (!(level.getBlockEntity(pos) instanceof TransportGate gate)) {
             return true;
         }
-
-        return pump.allowsTravel(level, pos, state, movementDirection);
-    }
-
-    private static boolean valveAllowsMovement(Level level, BlockPos pos, Direction movementDirection) {
-        BlockState state = level.getBlockState(pos);
-        return !(state.getBlock() instanceof ValveBlock valve)
-                || valve.canTravelTo(state, movementDirection);
+        return gate.allowsRoute(level, movementDirection);
     }
 
     @Nullable

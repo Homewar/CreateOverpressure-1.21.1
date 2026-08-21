@@ -129,8 +129,6 @@ public abstract class AbstractInlineTubeBlock extends BaseEntityBlock
         return false;
     }
 
-    protected abstract BlockEntityType<? extends PneumaticTubeBlockEntity> getInlineBlockEntityType();
-
     @Override
     public BlockState getRotatedBlockState(BlockState originalState, Direction targetedFace) {
         return originalState.setValue(
@@ -218,14 +216,7 @@ public abstract class AbstractInlineTubeBlock extends BaseEntityBlock
             BlockState state,
             BlockEntityType<T> type
     ) {
-        if (level.isClientSide) {
-            return null;
-        }
-        return createTickerHelper(
-                type,
-                getInlineBlockEntityType(),
-                PneumaticTubeBlockEntity::serverTick
-        );
+        return null;
     }
 
     @Override

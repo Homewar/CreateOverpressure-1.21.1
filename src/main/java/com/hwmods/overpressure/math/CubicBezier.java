@@ -100,6 +100,42 @@ public record CubicBezier(Vec3 p0, Vec3 p1, Vec3 p2, Vec3 p3) {
         return true;
     }
 
+    /**
+     * Checks the accumulated change of the tangent along this curve segment.
+     * This catches turns concentrated in the middle of a segment as well as
+     * excessive differences between its endpoint tangents.
+     */
+    public boolean satisfiesTurnAngleLimit(int samples, double maximumAngleDegrees) {
+        if (samples < 1) {
+            throw new IllegalArgumentException("Turn angle sample count must be positive");
+        }
+
+        Vec3 previousTangent = derivativeAt(0.0);
+        if (previousTangent.lengthSqr() <= 1.0E-8) {
+            return false;
+        }
+        previousTangent = previousTangent.normalize();
+
+        double accumulatedAngle = 0.0;
+        double maximumAngle = Math.toRadians(maximumAngleDegrees);
+        for (int i = 1; i <= samples; i++) {
+            Vec3 tangent = derivativeAt((double) i / samples);
+            if (tangent.lengthSqr() <= 1.0E-8) {
+                return false;
+            }
+            tangent = tangent.normalize();
+
+            double dot = Math.max(-1.0, Math.min(1.0, previousTangent.dot(tangent)));
+            accumulatedAngle += Math.acos(dot);
+            if (accumulatedAngle > maximumAngle + 1.0E-6) {
+                return false;
+            }
+            previousTangent = tangent;
+        }
+
+        return true;
+    }
+
     private Split splitAt(double t) {
         Vec3 p01 = p0.lerp(p1, t);
         Vec3 p12 = p1.lerp(p2, t);

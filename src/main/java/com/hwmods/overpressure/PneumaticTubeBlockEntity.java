@@ -15,6 +15,8 @@ import com.simibubi.create.content.decoration.bracket.BracketedBlockEntityBehavi
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import com.simibubi.create.foundation.utility.CreateLang;
+import com.hwmods.overpressure.transport.TubeTransportManager;
+import com.hwmods.overpressure.transport.ClientTubeTransportManager;
 
 import net.createmod.ponder.api.level.PonderLevel;
 import net.minecraft.ChatFormatting;
@@ -26,7 +28,6 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -49,7 +50,6 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
     private static final long CLIENT_MOTION_TTL = 200L;
     private static final Map<Level, Map<Long, ClientMotion>> CLIENT_MOTIONS = new WeakHashMap<>();
     private static final Map<Level, Long> CLIENT_LAST_CLEANUP = new WeakHashMap<>();
-    private static final Map<Level, Long> TRANSPORT_TOPOLOGY_VERSIONS = new WeakHashMap<>();
     private static long ponderAnimationSequence = Long.MIN_VALUE;
     private MovingTubeItem movingItem;
 
@@ -98,6 +98,20 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
 
     protected PneumaticTubeBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState blockState) {
         super(type, pos, blockState);
+    }
+
+    @Override
+    public void onLoad() {
+        super.onLoad();
+        if (level == null || level instanceof PonderLevel) {
+            return;
+        }
+        if (level.isClientSide) {
+            ClientTubeTransportManager.get(level).update(worldPosition, movingItem);
+        } else if (movingItem != null) {
+            TubeTransportManager.get(level).restore(worldPosition, movingItem);
+        }
+        movingItem = null;
     }
 
     @Override
@@ -164,66 +178,20 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
                 .append(Component.literal("|".repeat(SPEED_BAR_SEGMENTS - filled)).withStyle(ChatFormatting.DARK_GRAY));
     }
 
-    public static void serverTick(Level level, BlockPos pos, BlockState state, PneumaticTubeBlockEntity tube) {
-        if (tube.movingItem != null) {
-            tube.tickMovingItem(level);
-        }
-        tube.afterTransportTick(level);
-    }
-
-    protected void afterTransportTick(Level level) {
-    }
-
     public boolean acceptItem(ItemStack stack, TubePath path) {
         return acceptItem(stack, path, null);
     }
 
     public boolean acceptItem(ItemStack stack, TubePath path, BlockPos sourceConnector) {
-        if (!canAcceptItem(stack, path)) {
-            return false;
-        }
-
-        int pathIndex = path.tubePositions().indexOf(worldPosition);
-        List<MovingTubeItem.SpeedController> speedControllers = findSpeedControllers(path.tubePositions());
-
-        movingItem = new MovingTubeItem(stack, path.tubePositions(), path.targetConnector());
-        movingItem.sourceConnector = sourceConnector == null ? null : sourceConnector.immutable();
-        movingItem.spillsAtEnd = path.spillsAtEnd();
-        movingItem.protectedFromJunctionSpill = containsMergerPassage(level, path.tubePositions());
-        movingItem.reservedMergerPassages = findConfiguredMergerPassages(level, path.tubePositions());
-        movingItem.startPathIndex = pathIndex;
-        movingItem.pathIndex = pathIndex;
-        movingItem.speedControllers = speedControllers;
-        movingItem.moveTime = calculateMoveTime(speedControllers);
-        movingItem.segmentDuration = calculateSegmentDuration(movingItem, pathIndex);
-        movingItem.hasSpeedControllerCache = true;
-        movingItem.transportTopologyVersion = getTransportTopologyVersion(level);
-        movingItem.animationId = createAnimationId(level);
-        movingItem.startedAtGameTime = level.getGameTime();
-        movingItem.lastTickedGameTime = level.getGameTime();
-
-        setChanged();
-        syncMovingItem(level);
-        return true;
+        return level != null
+                && !level.isClientSide
+                && TubeTransportManager.get(level).accept(worldPosition, stack, path, sourceConnector);
     }
 
     public boolean canAcceptItem(ItemStack stack, TubePath path) {
-        if (movingItem != null || stack.isEmpty() || path.isEmpty() || !Config.canEnterTube(stack)) {
-            return false;
-        }
-
-        int pathIndex = path.tubePositions().indexOf(worldPosition);
-
-        if (pathIndex < 0) {
-            return false;
-        }
-
-        List<MovingTubeItem.SpeedController> speedControllers = findSpeedControllers(path.tubePositions());
-        if (!hasRunningPump(speedControllers)) {
-            return false;
-        }
-
-        return true;
+        return level != null
+                && !level.isClientSide
+                && TubeTransportManager.get(level).canAccept(worldPosition, stack, path);
     }
 
     public boolean canTravelTo(Level level, Direction direction) {
@@ -278,601 +246,15 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         return connectedDirections == 1 && onlyConnectedDirection == direction.getOpposite();
     }
 
-    private void tickMovingItem(Level level) {
-        if (movingItem.lastTickedGameTime == level.getGameTime()) {
-            return;
-        }
-
-        movingItem.lastTickedGameTime = level.getGameTime();
-
-        if (movingItem.waitingAtDestination) {
-            tryInsertIntoTargetConnector(level);
-            return;
-        }
-
-        if (movingItem.waitingForNextTube) {
-            tryRerouteDeviderOutput(level);
-
-            if (markBrokenNextSegmentAsSpill(level)) {
-                return;
-            }
-
-            if (!hasRunningPump(movingItem)) {
-                return;
-            }
-
-            if (!canMoveToNextPathNode(level)) {
-                return;
-            }
-
-            movingItem.waitingForNextTube = false;
-            moveToNextPathNode(level);
-            return;
-        }
-
-        if (!hasRunningPump(movingItem)) {
-            return;
-        }
-
-        int segmentDuration = getCurrentSegmentDuration();
-        if (segmentDuration <= 0) {
-            return;
-        }
-
-        if (isApproachingFallbackEnd()
-                && movingItem.segmentProgress + 1.0f / segmentDuration >= 0.5f) {
-            tryInsertIntoTargetConnector(level);
-            return;
-        }
-
-        if (isApproachingBrokenSegment(level)
-                && movingItem.segmentProgress + 1.0f / segmentDuration >= 0.5f) {
-            markBrokenNextSegmentAsSpill(level);
-            return;
-        }
-
-        movingItem.segmentProgress = Math.min(1.0f, movingItem.segmentProgress + 1.0f / segmentDuration);
-        movingItem.progress = Math.round(movingItem.segmentProgress * segmentDuration);
-
-        if (movingItem.segmentProgress < 1.0f) {
-            setChanged();
-            return;
-        }
-
-        moveToNextPathNode(level);
-    }
-
-    private boolean tryRerouteDeviderOutput(Level level) {
-        if (!(this instanceof DeviderBlockEntity devider)) {
-            return false;
-        }
-
-        int nextPathIndex = movingItem.pathIndex + 1;
-        if (nextPathIndex >= movingItem.path.size()) {
-            return false;
-        }
-
-        BlockPos previousPos = movingItem.pathIndex > 0
-                ? movingItem.path.get(movingItem.pathIndex - 1)
-                : null;
-        List<BlockPos> enabledOutputs = devider.getForwardPositions(previousPos);
-        BlockPos currentOutput = movingItem.path.get(nextPathIndex);
-        if (enabledOutputs.contains(currentOutput)
-                && level.getBlockEntity(currentOutput) instanceof PneumaticTubeBlockEntity currentTube) {
-            if (currentTube.movingItem == null || !isOutputBranchSaturated(level, currentTube)) {
-                return false;
-            }
-        }
-
-        for (BlockPos alternateOutput : enabledOutputs) {
-            if (alternateOutput.equals(currentOutput)) {
-                continue;
-            }
-
-            TubePath alternatePath = TubeNetworkPathfinder.findPathFromOccupiedTube(
-                    level,
-                    worldPosition,
-                    alternateOutput
-            );
-            if (alternatePath.isEmpty() || alternatePath.spillsAtEnd()) {
-                continue;
-            }
-
-            List<BlockPos> reroutedPath = new java.util.ArrayList<>(
-                    movingItem.path.subList(0, movingItem.pathIndex + 1)
-            );
-            reroutedPath.addAll(alternatePath.tubePositions());
-            movingItem.path = reroutedPath;
-            updateReservedMergerPassages(level, movingItem, reroutedPath);
-            movingItem.targetConnector = alternatePath.targetConnector();
-            movingItem.spillsAtEnd = alternatePath.spillsAtEnd();
-            movingItem.speedControllers = findSpeedControllers(reroutedPath);
-            movingItem.hasSpeedControllerCache = true;
-            movingItem.transportTopologyVersion = getTransportTopologyVersion(level);
-            movingItem.lastSpeedCheckGameTime = Long.MIN_VALUE;
-            movingItem.segmentDuration = calculateSegmentDuration(movingItem, movingItem.pathIndex);
-            movingItem.waitingAtDestination = false;
-            setChanged();
-            syncMovingItem(level);
-            return true;
-        }
-
-        return false;
-    }
-
     static boolean isOutputBranchSaturated(Level level, PneumaticTubeBlockEntity firstTube) {
-        Set<BlockPos> visited = new HashSet<>();
-        PneumaticTubeBlockEntity tube = firstTube;
-
-        while (visited.add(tube.worldPosition)) {
-            MovingTubeItem queuedItem = tube.movingItem;
-            if (queuedItem == null) {
-                return false;
-            }
-            if (queuedItem.waitingAtDestination) {
-                return true;
-            }
-            if (!queuedItem.waitingForNextTube) {
-                return false;
-            }
-
-            int nextIndex = queuedItem.pathIndex + 1;
-            if (nextIndex >= queuedItem.path.size()) {
-                return true;
-            }
-
-            BlockEntity nextEntity = level.getBlockEntity(queuedItem.path.get(nextIndex));
-            if (nextEntity instanceof ItemPumpBlockEntity) {
-                nextIndex++;
-                if (nextIndex >= queuedItem.path.size()) {
-                    return true;
-                }
-                nextEntity = level.getBlockEntity(queuedItem.path.get(nextIndex));
-            }
-
-            if (!(nextEntity instanceof PneumaticTubeBlockEntity nextTube)) {
-                return true;
-            }
-            tube = nextTube;
-        }
-
-        return true;
-    }
-
-    private void moveToNextPathNode(Level level) {
-        int previousPathIndex = movingItem.pathIndex;
-        if (!canTravelToNextPathNode(level, previousPathIndex)) {
-            movingItem.waitingForNextTube = true;
-            movingItem.waitingAtDestination = false;
-            setChanged();
-            syncMovingItem(level);
-            return;
-        }
-
-        movingItem.progress = 0;
-        movingItem.segmentProgress = 0.0f;
-        movingItem.pathIndex++;
-
-        if (movingItem.pathIndex >= movingItem.path.size()) {
-            movingItem.pathIndex = previousPathIndex;
-            tryInsertIntoTargetConnector(level);
-            return;
-        }
-
-        BlockPos nextPos = movingItem.path.get(movingItem.pathIndex);
-        BlockEntity nextBlockEntity = level.getBlockEntity(nextPos);
-
-        if (nextBlockEntity instanceof PneumaticTubeBlockEntity nextTube && nextTube.movingItem == null) {
-            if (nextTube instanceof DeviderBlockEntity devider && devider.isBranchPosition(worldPosition)) {
-                devider.markMergeInputUsed(worldPosition);
-            }
-            transferToTube(level, nextTube);
-        } else if (nextBlockEntity instanceof PneumaticTubeBlockEntity) {
-            movingItem.pathIndex = previousPathIndex;
-            movingItem.waitingForNextTube = true;
-            setChanged();
-            syncMovingItem(level);
-        } else if (nextBlockEntity instanceof ItemPumpBlockEntity) {
-            movingItem.pathIndex++;
-            if (movingItem.pathIndex >= movingItem.path.size()) {
-                movingItem.pathIndex = previousPathIndex;
-                tryInsertIntoTargetConnector(level);
-                return;
-            }
-
-            BlockEntity afterPumpBlockEntity = level.getBlockEntity(movingItem.path.get(movingItem.pathIndex));
-
-            if (afterPumpBlockEntity instanceof PneumaticTubeBlockEntity afterPumpTube && afterPumpTube.movingItem == null) {
-                if (afterPumpTube instanceof DeviderBlockEntity devider && devider.isBranchPosition(nextPos)) {
-                    devider.markMergeInputUsed(nextPos);
-                }
-                transferToTube(level, afterPumpTube);
-            } else if (!isPathNode(level, movingItem.path.get(movingItem.pathIndex))) {
-                ejectMovingItem(level, Vec3.atCenterOf(nextPos));
-            } else {
-                movingItem.pathIndex = previousPathIndex;
-                movingItem.waitingForNextTube = true;
-                setChanged();
-                syncMovingItem(level);
-            }
-        } else if (!(nextBlockEntity instanceof PneumaticTubeBlockEntity)) {
-            movingItem.pathIndex = previousPathIndex;
-            ejectMovingItem(level, getOpenEndPosition(nextPos));
-        }
-    }
-
-    private void transferToTube(Level level, PneumaticTubeBlockEntity nextTube) {
-        nextTube.movingItem = movingItem;
-        nextTube.movingItem.progress = 0;
-        nextTube.movingItem.segmentProgress = 0.0f;
-        nextTube.movingItem.moveTime = nextTube.calculateMoveTime(nextTube.movingItem.speedControllers);
-        nextTube.movingItem.segmentDuration = nextTube.calculateSegmentDuration(
-                nextTube.movingItem,
-                nextTube.movingItem.pathIndex
-        );
-        nextTube.movingItem.lastSpeedCheckGameTime = Long.MIN_VALUE;
-        nextTube.movingItem.startedAtGameTime = level.getGameTime();
-        nextTube.movingItem.waitingForNextTube = false;
-        nextTube.movingItem.waitingAtDestination = false;
-        movingItem = null;
-        nextTube.setChanged();
-        setChanged();
-        nextTube.syncMovingItem(level);
-        syncMovingItem(level);
+        return TubeTransportManager.get(level).isOutputBranchSaturated(firstTube.worldPosition);
     }
 
     public void ejectMovingItem(Level level, Vec3 position) {
-        if (movingItem == null) {
-            return;
-        }
-
-        ItemStack stack = movingItem.stack;
-        movingItem = null;
-        level.addFreshEntity(new ItemEntity(level, position.x, position.y, position.z, stack));
-        setChanged();
-        syncMovingItem(level);
-    }
-
-    private boolean isApproachingBrokenSegment(Level level) {
-        return findBrokenNextSegment(level) != null;
-    }
-
-    @javax.annotation.Nullable
-    private BlockPos findBrokenNextSegment(Level level) {
-        int nextPathIndex = movingItem.pathIndex + 1;
-        if (nextPathIndex >= movingItem.path.size()) {
-            return null;
-        }
-
-        BlockPos nextPos = movingItem.path.get(nextPathIndex);
-        if (!isPathNode(level, nextPos)) {
-            return nextPos;
-        }
-
-        if (level.getBlockEntity(nextPos) instanceof ItemPumpBlockEntity
-                && ++nextPathIndex < movingItem.path.size()) {
-            BlockPos afterPumpPos = movingItem.path.get(nextPathIndex);
-            if (!isPathNode(level, afterPumpPos)) {
-                return afterPumpPos;
-            }
-        }
-
-        return null;
-    }
-
-    private boolean markBrokenNextSegmentAsSpill(Level level) {
-        BlockPos brokenSegment = findBrokenNextSegment(level);
-        if (brokenSegment == null) {
-            return false;
-        }
-
-        movingItem.targetConnector = brokenSegment;
-        movingItem.spillsAtEnd = true;
-        movingItem.waitingAtDestination = true;
-        movingItem.waitingForNextTube = false;
-        setChanged();
-        syncMovingItem(level);
-        tryInsertIntoTargetConnector(level);
-        return true;
-    }
-
-    private boolean isApproachingFallbackEnd() {
-        return movingItem.spillsAtEnd && movingItem.pathIndex + 1 >= movingItem.path.size();
-    }
-
-    private Vec3 getOpenEndPosition(BlockPos missingSegment) {
-        Direction direction = Direction.getNearest(
-                missingSegment.getX() - worldPosition.getX(),
-                missingSegment.getY() - worldPosition.getY(),
-                missingSegment.getZ() - worldPosition.getZ()
-        );
-        return Vec3.atCenterOf(worldPosition).add(
-                direction.getStepX() * 0.5,
-                direction.getStepY() * 0.5,
-                direction.getStepZ() * 0.5
-        );
-    }
-
-    private static boolean isPathNode(Level level, BlockPos pos) {
-        return PneumaticLine.isPathNode(level, pos);
-    }
-
-    private void tryInsertIntoTargetConnector(Level level) {
-        if (movingItem.spillsAtEnd && isRestoredInsertConnector(level)) {
-            movingItem.spillsAtEnd = false;
-        }
-
-        if (movingItem.spillsAtEnd) {
-            if (restoreBlockedPath(level)) {
-                return;
-            }
-
-            if (level.getBlockState(movingItem.targetConnector).isAir()) {
-                ejectMovingItem(level, getOpenEndPosition(movingItem.targetConnector));
-                return;
-            }
-
-            if (pathContainsRedstoneMerger(level)) {
-                holdMovingItemForRoute(level);
-                return;
-            }
-
-            boolean wasWaitingAtDestination = movingItem.waitingAtDestination;
-            movingItem.waitingAtDestination = true;
-            movingItem.waitingForNextTube = false;
-
-            if (!wasWaitingAtDestination) {
-                setChanged();
-                syncMovingItem(level);
-            }
-            return;
-        }
-
-        BlockEntity targetBlockEntity = level.getBlockEntity(movingItem.targetConnector);
-
-        if (!(targetBlockEntity instanceof PneumaticConnectionBlockEntity connector)) {
-            movingItem = null;
-            setChanged();
-            syncMovingItem(level);
-            return;
-        }
-
-        if (!canInsertIntoTargetConnector(level)) {
-            holdMovingItemForRoute(level);
-            return;
-        }
-
-        boolean wasWaitingAtDestination = movingItem.waitingAtDestination;
-        ItemStack remaining = connector.insertIntoAttachedInventory(level, movingItem.stack);
-
-        if (remaining.isEmpty()) {
-            movingItem = null;
-            setChanged();
-            syncMovingItem(level);
-        } else {
-            movingItem.stack = remaining;
-            movingItem.waitingAtDestination = true;
-            movingItem.waitingForNextTube = false;
-
-            if (!wasWaitingAtDestination) {
-                setChanged();
-                syncMovingItem(level);
-            }
+        if (!level.isClientSide) {
+            TubeTransportManager.get(level).eject(worldPosition, position);
         }
     }
-
-    private boolean canInsertIntoTargetConnector(Level level) {
-        BlockState targetState = level.getBlockState(movingItem.targetConnector);
-        if (!(targetState.getBlock() instanceof PneumaticConnectionBlock)
-                || targetState.getValue(PneumaticConnectionBlock.MODE)
-                != PneumaticConnectionBlock.ConnectionMode.INSERT) {
-            return false;
-        }
-
-        Direction direction = Direction.getNearest(
-                movingItem.targetConnector.getX() - worldPosition.getX(),
-                movingItem.targetConnector.getY() - worldPosition.getY(),
-                movingItem.targetConnector.getZ() - worldPosition.getZ()
-        );
-        return targetState.getValue(PneumaticConnectionBlock.FACING) == direction
-                && canTravelTo(level, direction);
-    }
-
-    private boolean pathContainsRedstoneMerger(Level level) {
-        if (movingItem.protectedFromJunctionSpill) {
-            return true;
-        }
-
-        movingItem.protectedFromJunctionSpill = containsMergerPassage(level, movingItem.path);
-        return movingItem.protectedFromJunctionSpill;
-    }
-
-    private static boolean containsMergerPassage(Level level, List<BlockPos> path) {
-        for (int index = 1; index + 1 < path.size(); index++) {
-            if (level.getBlockEntity(path.get(index)) instanceof DeviderBlockEntity devider
-                    && devider.isMergerPassage(path.get(index - 1), path.get(index + 1))) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static List<BlockPos> findConfiguredMergerPassages(Level level, List<BlockPos> path) {
-        List<BlockPos> passages = new java.util.ArrayList<>();
-        for (int index = 1; index + 1 < path.size(); index++) {
-            BlockPos junctionPos = path.get(index);
-            if (level.getBlockEntity(junctionPos) instanceof DeviderBlockEntity devider
-                    && devider.getJunctionRole() == DeviderBlockEntity.JunctionRole.MERGER
-                    && devider.isMergerPassage(path.get(index - 1), path.get(index + 1))) {
-                passages.add(junctionPos.immutable());
-            }
-        }
-        return List.copyOf(passages);
-    }
-
-    private static void updateReservedMergerPassages(
-            Level level,
-            MovingTubeItem item,
-            List<BlockPos> path
-    ) {
-        List<BlockPos> passages = new java.util.ArrayList<>();
-        for (BlockPos reserved : item.reservedMergerPassages) {
-            if (path.contains(reserved)) {
-                passages.add(reserved);
-            }
-        }
-        for (BlockPos configured : findConfiguredMergerPassages(level, path)) {
-            if (!passages.contains(configured)) {
-                passages.add(configured);
-            }
-        }
-        item.reservedMergerPassages = List.copyOf(passages);
-    }
-
-    private void holdMovingItemForRoute(Level level) {
-        boolean stateChanged = !movingItem.waitingAtDestination || movingItem.waitingForNextTube;
-        movingItem.waitingAtDestination = true;
-        movingItem.waitingForNextTube = false;
-        if (stateChanged) {
-            setChanged();
-            syncMovingItem(level);
-        }
-    }
-
-    private boolean isRestoredInsertConnector(Level level) {
-        BlockEntity targetBlockEntity = level.getBlockEntity(movingItem.targetConnector);
-        if (!(targetBlockEntity instanceof PneumaticConnectionBlockEntity)
-                || level.getBlockState(movingItem.targetConnector).getValue(PneumaticConnectionBlock.MODE)
-                != PneumaticConnectionBlock.ConnectionMode.INSERT) {
-            return false;
-        }
-
-        Direction direction = Direction.getNearest(
-                movingItem.targetConnector.getX() - worldPosition.getX(),
-                movingItem.targetConnector.getY() - worldPosition.getY(),
-                movingItem.targetConnector.getZ() - worldPosition.getZ()
-        );
-        return getBlockState().getValue(getConnectionProperty(direction))
-                && level.getBlockState(movingItem.targetConnector).getValue(PneumaticConnectionBlock.FACING) == direction;
-    }
-
-    private boolean restoreBlockedPath(Level level) {
-        if (!isPathNode(level, movingItem.targetConnector)) {
-            return false;
-        }
-
-        TubePath extension = TubeNetworkPathfinder.findPathToInsertConnector(
-                level,
-                worldPosition,
-                movingItem.targetConnector
-        );
-        if (extension.isEmpty()) {
-            return false;
-        }
-
-        List<BlockPos> restoredPath = new java.util.ArrayList<>(
-                movingItem.path.subList(0, movingItem.pathIndex + 1)
-        );
-        restoredPath.addAll(extension.tubePositions());
-        movingItem.path = restoredPath;
-        updateReservedMergerPassages(level, movingItem, restoredPath);
-        movingItem.targetConnector = extension.targetConnector();
-        movingItem.spillsAtEnd = extension.spillsAtEnd();
-        movingItem.speedControllers = findSpeedControllers(restoredPath);
-        movingItem.hasSpeedControllerCache = true;
-        movingItem.transportTopologyVersion = getTransportTopologyVersion(level);
-        movingItem.lastSpeedCheckGameTime = Long.MIN_VALUE;
-        movingItem.waitingAtDestination = false;
-        movingItem.waitingForNextTube = false;
-        movingItem.progress = 0;
-        movingItem.segmentProgress = 0.0f;
-        movingItem.segmentDuration = calculateSegmentDuration(movingItem, movingItem.pathIndex);
-        movingItem.startedAtGameTime = level.getGameTime();
-        TubeNetworkPathfinder.commitDeviderChoices(level, extension);
-        setChanged();
-        syncMovingItem(level);
-        return true;
-    }
-
-    private boolean canMoveToNextPathNode(Level level) {
-        if (!canTravelToNextPathNode(level, movingItem.pathIndex)) {
-            return false;
-        }
-
-        int nextPathIndex = movingItem.pathIndex + 1;
-        if (nextPathIndex >= movingItem.path.size()) {
-            return true;
-        }
-
-        BlockEntity nextBlockEntity = level.getBlockEntity(movingItem.path.get(nextPathIndex));
-        if (nextBlockEntity instanceof PneumaticTubeBlockEntity nextTube) {
-            return nextTube.movingItem == null;
-        }
-
-        if (!(nextBlockEntity instanceof ItemPumpBlockEntity) || ++nextPathIndex >= movingItem.path.size()) {
-            return true;
-        }
-
-        BlockEntity afterPumpBlockEntity = level.getBlockEntity(movingItem.path.get(nextPathIndex));
-        return !(afterPumpBlockEntity instanceof PneumaticTubeBlockEntity afterPumpTube)
-                || afterPumpTube.movingItem == null;
-    }
-
-    private boolean canTravelToNextPathNode(Level level, int currentPathIndex) {
-        int nextPathIndex = currentPathIndex + 1;
-        if (nextPathIndex >= movingItem.path.size()) {
-            return true;
-        }
-
-        BlockPos currentPos = movingItem.path.get(currentPathIndex);
-        BlockPos nextPos = movingItem.path.get(nextPathIndex);
-        boolean finishingExistingMergerPassage = false;
-        if (level.getBlockEntity(currentPos) instanceof DeviderBlockEntity devider) {
-            BlockPos previousPos = currentPathIndex > 0
-                    ? movingItem.path.get(currentPathIndex - 1)
-                    : movingItem.sourceConnector;
-            finishingExistingMergerPassage = isReservedMergerPassage(
-                    level,
-                    movingItem.path,
-                    movingItem.reservedMergerPassages,
-                    currentPathIndex
-            );
-            if (!finishingExistingMergerPassage
-                    && !devider.getForwardPositions(previousPos).contains(nextPos)) {
-                return false;
-            }
-        }
-        if (level.getBlockEntity(nextPos) instanceof DeviderBlockEntity devider
-                && devider.getForwardPositions(currentPos).isEmpty()) {
-            return false;
-        }
-        if (level.getBlockEntity(nextPos) instanceof DeviderBlockEntity devider
-                && devider.isBranchPosition(currentPos)
-                && !devider.canMergeFrom(level, currentPos)) {
-            return false;
-        }
-        if (!canMoveBetween(currentPos, nextPos)
-                && !finishingExistingMergerPassage) {
-            return false;
-        }
-
-        if (!(level.getBlockEntity(nextPos) instanceof ItemPumpBlockEntity) || ++nextPathIndex >= movingItem.path.size()) {
-            return true;
-        }
-
-        BlockPos afterPumpPos = movingItem.path.get(nextPathIndex);
-        if (level.getBlockEntity(afterPumpPos) instanceof DeviderBlockEntity devider
-                && devider.getForwardPositions(nextPos).isEmpty()) {
-            return false;
-        }
-        if (level.getBlockEntity(afterPumpPos) instanceof DeviderBlockEntity devider
-                && devider.isBranchPosition(nextPos)
-                && !devider.canMergeFrom(level, nextPos)) {
-            return false;
-        }
-        return canMoveBetween(nextPos, afterPumpPos);
-    }
-
     private static boolean isMergerPassage(Level level, List<BlockPos> path, int dividerPathIndex) {
         if (dividerPathIndex <= 0 || dividerPathIndex + 1 >= path.size()) {
             return false;
@@ -898,11 +280,17 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
     }
 
     public MovingTubeItem getMovingItem() {
-        return movingItem;
+        if (level == null || level instanceof PonderLevel) {
+            return movingItem;
+        }
+        if (level.isClientSide) {
+            return ClientTubeTransportManager.get(level).snapshot(worldPosition);
+        }
+        return TubeTransportManager.get(level).getSnapshot(worldPosition);
     }
 
     public MovingTubeItem getRenderMovingItem() {
-        return movingItem;
+        return getMovingItem();
     }
 
     /**
@@ -1432,14 +820,11 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
             return;
         }
 
-        long currentVersion = TRANSPORT_TOPOLOGY_VERSIONS.getOrDefault(level, 0L);
-        TRANSPORT_TOPOLOGY_VERSIONS.put(level, currentVersion == Long.MAX_VALUE ? 0L : currentVersion + 1L);
+        TubeTransportManager.get(level).invalidateTopology(pos);
     }
 
     private static long getTransportTopologyVersion(Level level) {
-        return level == null || level.isClientSide
-                ? 0L
-                : TRANSPORT_TOPOLOGY_VERSIONS.getOrDefault(level, 0L);
+        return level == null || level.isClientSide ? 0L : TubeTransportManager.get(level).topologyVersion();
     }
 
     private static void cleanupClientMotions(Level level, Map<Long, ClientMotion> motions, long gameTime) {
@@ -1455,54 +840,16 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
     private float getClientGameTime() {
         return level == null ? 0.0f : level.getGameTime();
     }
-    private int getCurrentMoveTime() {
-        if (movingItem == null || level == null) {
-            return BASE_MOVE_TIME;
-        }
-
-        ensureSpeedControllers(movingItem);
-        if (movingItem.speedControllers.isEmpty()) {
-            movingItem.moveTime = 0;
-            movingItem.segmentDuration = 0;
-            return 0;
-        }
-
-        long gameTime = level.getGameTime();
-        if (movingItem.lastSpeedCheckGameTime != Long.MIN_VALUE
-                && gameTime - movingItem.lastSpeedCheckGameTime < SPEED_CHECK_INTERVAL) {
-            return movingItem.moveTime;
-        }
-
-        movingItem.moveTime = calculateMoveTime(movingItem.speedControllers);
-        movingItem.lastSpeedCheckGameTime = gameTime;
-        return movingItem.moveTime;
-    }
-
-    private int getCurrentSegmentDuration() {
-        int moveTime = getCurrentMoveTime();
-        if (movingItem == null || moveTime <= 0) {
-            if (movingItem != null) {
-                movingItem.segmentDuration = 0;
-            }
-            return 0;
-        }
-
-        movingItem.segmentDuration = calculateSegmentDuration(movingItem, movingItem.pathIndex);
-        return movingItem.segmentDuration;
-    }
-
-    private long createAnimationId(Level level) {
-        return level.getGameTime() ^ worldPosition.asLong();
-    }
-
-    private void syncMovingItem(Level level) {
-        level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
-    }
 
     @Override
     protected void write(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
         super.write(tag, registries, clientPacket);
+        MovingTubeItem localItem = movingItem;
+        if (level != null && !level.isClientSide) {
+            movingItem = TubeTransportManager.get(level).getSnapshot(worldPosition);
+        }
         saveMovingItem(tag, registries);
+        movingItem = localItem;
     }
 
     @Override
@@ -1510,6 +857,14 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         super.read(tag, registries, clientPacket);
         movingItem = loadMovingItem(tag, registries);
         relocateLoadedMovingItem();
+        if (level != null && !(level instanceof PonderLevel)) {
+            if (level.isClientSide) {
+                ClientTubeTransportManager.get(level).update(worldPosition, movingItem);
+            } else if (movingItem != null) {
+                TubeTransportManager.get(level).restore(worldPosition, movingItem);
+            }
+            movingItem = null;
+        }
     }
 
     private void relocateLoadedMovingItem() {

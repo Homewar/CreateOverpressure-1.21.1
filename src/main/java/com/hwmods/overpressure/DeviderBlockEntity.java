@@ -3,6 +3,9 @@ package com.hwmods.overpressure;
 import java.util.List;
 
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
+import com.hwmods.overpressure.transport.TransportJunction;
+import com.hwmods.overpressure.transport.TubeGraphRoute;
+import com.hwmods.overpressure.transport.TubeTransportManager;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -13,7 +16,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
-public class DeviderBlockEntity extends PneumaticTubeBlockEntity {
+public class DeviderBlockEntity extends PneumaticTubeBlockEntity implements TransportJunction {
     public static final double OUTPUT_SIDE_OFFSET = 14.0606601718 / 16.0 - 0.5;
     public static final double OUTPUT_Y = 10.9393398282 / 16.0;
 
@@ -59,12 +62,22 @@ public class DeviderBlockEntity extends PneumaticTubeBlockEntity {
         return List.of();
     }
 
+    @Override
+    public List<BlockPos> forwardPorts(BlockPos previousPos) {
+        return getForwardPositions(previousPos);
+    }
+
     public List<BlockPos> getConnectedPortPositions() {
         return List.of(
                 getStraightPosition(),
                 worldPosition.relative(getLeftOutputDirection()),
                 worldPosition.relative(getRightOutputDirection())
         );
+    }
+
+    @Override
+    public List<BlockPos> connectedPorts() {
+        return getConnectedPortPositions();
     }
 
     public List<BlockPos> getOrderedBranchPositions() {
@@ -80,8 +93,18 @@ public class DeviderBlockEntity extends PneumaticTubeBlockEntity {
         return List.of(worldPosition.relative(first), worldPosition.relative(first.getOpposite()));
     }
 
+    @Override
+    public List<BlockPos> orderedBranchPorts() {
+        return getOrderedBranchPositions();
+    }
+
     public BlockPos getStraightPosition() {
         return worldPosition.relative(getInputDirection());
+    }
+
+    @Override
+    public BlockPos straightPort() {
+        return getStraightPosition();
     }
 
     public static Vec3 getLocalOutputPoint(Direction side, Direction input) {
@@ -95,9 +118,19 @@ public class DeviderBlockEntity extends PneumaticTubeBlockEntity {
         return pos != null && pos.equals(getStraightPosition());
     }
 
+    @Override
+    public boolean isStraightPort(BlockPos pos) {
+        return isStraightPosition(pos);
+    }
+
     public boolean isBranchPosition(BlockPos pos) {
         return pos != null && (pos.equals(worldPosition.relative(getLeftOutputDirection()))
                 || pos.equals(worldPosition.relative(getRightOutputDirection())));
+    }
+
+    @Override
+    public boolean isBranchPort(BlockPos pos) {
+        return isBranchPosition(pos);
     }
 
     public boolean isBranchOutputEnabled(BlockPos pos) {
@@ -116,6 +149,11 @@ public class DeviderBlockEntity extends PneumaticTubeBlockEntity {
 
     public boolean isMergerPassage(BlockPos branchPos, BlockPos straightPos) {
         return isBranchPosition(branchPos) && isStraightPosition(straightPos);
+    }
+
+    @Override
+    public boolean isMerger() {
+        return getJunctionRole() == JunctionRole.MERGER;
     }
 
     private boolean isSelectedBranch(BlockPos pos) {
@@ -189,11 +227,7 @@ public class DeviderBlockEntity extends PneumaticTubeBlockEntity {
             return false;
         }
 
-        MovingTubeItem item = tube.getMovingItem();
-        int dividerIndex = item == null ? -1 : item.pathIndex + dividerOffset;
-        return item != null
-                && dividerIndex < item.path.size()
-                && item.path.get(dividerIndex).equals(worldPosition);
+        return TubeTransportManager.get(level).isHeadingTo(itemTubePos, dividerOffset, worldPosition);
     }
 
     public Direction.Axis getOutputAxis() {
@@ -210,6 +244,11 @@ public class DeviderBlockEntity extends PneumaticTubeBlockEntity {
 
     public Direction getInputDirection() {
         return getBlockState().getValue(DeviderBlock.INPUT);
+    }
+
+    @Override
+    public TubeGraphRoute.NodeKind graphNodeKind() {
+        return TubeGraphRoute.NodeKind.JUNCTION;
     }
 
     public JunctionRole getJunctionRole() {
