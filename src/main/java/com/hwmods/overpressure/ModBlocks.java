@@ -35,6 +35,7 @@ public class ModBlocks {
     public static final DeferredBlock<ItemPumpBlock> ITEM_PUMP = BLOCKS.register("item_pump", () -> new ItemPumpBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.6f).sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<ItemPumpBlock> CREATIVE_ITEM_PUMP = BLOCKS.register("creative_item_pump", () -> new ItemPumpBlock(BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_LIGHT_BLUE).strength(0.6f).sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<DeviderBlock> DEVIDER = BLOCKS.register("devider", () -> new DeviderBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.6f).sound(SoundType.METAL).noOcclusion()));
+    public static final DeferredBlock<FilterPipeBlock> FILTER_PIPE = BLOCKS.register("filter_pipe", () -> new FilterPipeBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.6f).sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<ValveBlock> VALVE = BLOCKS.register("valve", () -> new ValveBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.6f).sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<ClogSensorBlock> CLOG_SENSOR = BLOCKS.register("clog_sensor", () -> new ClogSensorBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.6f).sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<CapsulePortBlock> CAPSULE_PORT = BLOCKS.register("capsule_port", () -> new CapsulePortBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.8f).sound(SoundType.METAL).noOcclusion()));
@@ -45,6 +46,7 @@ public class ModBlocks {
     public static final DeferredItem<Item> ITEM_PUMP_ITEM = ITEMS.register("item_pump", () -> new BlockItem(ITEM_PUMP.get(), new Item.Properties()));
     public static final DeferredItem<Item> CREATIVE_ITEM_PUMP_ITEM = ITEMS.register("creative_item_pump", () -> new BlockItem(CREATIVE_ITEM_PUMP.get(), new Item.Properties()));
     public static final DeferredItem<Item> DEVIDER_ITEM = ITEMS.register("devider", () -> new BlockItem(DEVIDER.get(), new Item.Properties()));
+    public static final DeferredItem<Item> FILTER_PIPE_ITEM = ITEMS.register("filter_pipe", () -> new BlockItem(FILTER_PIPE.get(), new Item.Properties()));
     public static final DeferredItem<Item> VALVE_ITEM = ITEMS.register("valve", () -> new BlockItem(VALVE.get(), new Item.Properties()));
     public static final DeferredItem<Item> CLOG_SENSOR_ITEM = ITEMS.register("clog_sensor", () -> new BlockItem(CLOG_SENSOR.get(), new Item.Properties()));
     public static final DeferredItem<Item> CAPSULE_PORT_ITEM = ITEMS.register("capsule_port", () -> new BlockItem(CAPSULE_PORT.get(), new Item.Properties()));
@@ -62,6 +64,7 @@ public class ModBlocks {
                         output.accept(ITEM_PUMP_ITEM.get());
                         output.accept(CREATIVE_ITEM_PUMP_ITEM.get());
                         output.accept(DEVIDER_ITEM.get());
+                        output.accept(FILTER_PIPE_ITEM.get());
                         output.accept(VALVE_ITEM.get());
                         output.accept(CLOG_SENSOR_ITEM.get());
                         output.accept(CAPSULE_PORT_ITEM.get());

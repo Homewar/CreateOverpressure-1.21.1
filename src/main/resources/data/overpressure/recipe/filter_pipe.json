@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "pattern": [
+    " P ",
+    "PEP",
+    " B "
+  ],
+  "key": {
+    "P": {
+      "item": "overpressure:pneumatic_tube"
+    },
+    "E": {
+      "item": "create:electron_tube"
+    },
+    "B": {
+      "item": "create:brass_sheet"
+    }
+  },
+  "result": {
+    "id": "overpressure:filter_pipe",
+    "count": 1
+  }
+}

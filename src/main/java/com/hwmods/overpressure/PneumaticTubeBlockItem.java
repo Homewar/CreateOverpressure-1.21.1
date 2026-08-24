@@ -237,6 +237,24 @@ public class PneumaticTubeBlockItem extends BlockItem {
             Direction clickedFace,
             Vec3 clickLocation
     ) {
+        if (state.getBlock() instanceof FilterPipeBlock) {
+            Vec3 localClick = clickLocation.subtract(Vec3.atLowerCornerOf(pos));
+            Direction input = state.getValue(FilterPipeBlock.INPUT);
+            Direction main = input.getOpposite();
+            Direction branch = FilterPipeBlock.getBranchDirection(state);
+            Vec3 inputPoint = new Vec3(0.5, 0.5, 0.5)
+                    .add(Vec3.atLowerCornerOf(input.getNormal()).scale(0.5));
+            Vec3 straightPoint = new Vec3(0.5, 0.5, 0.5)
+                    .add(Vec3.atLowerCornerOf(main.getNormal()).scale(0.5));
+            Vec3 branchPoint = DeviderBlockEntity.getLocalOutputPoint(branch, input);
+            double branchDistance = localClick.distanceToSqr(branchPoint);
+            if (branchDistance < localClick.distanceToSqr(inputPoint)
+                    && branchDistance < localClick.distanceToSqr(straightPoint)) {
+                return new CurveStart(pos, main, branch);
+            }
+            return null;
+        }
+
         if (!(state.getBlock() instanceof DeviderBlock)) {
             return null;
         }
@@ -729,6 +747,11 @@ public class PneumaticTubeBlockItem extends BlockItem {
             return CapsulePortBlock.getOutputDirection(state) == direction;
         }
 
+        if (state.getBlock() instanceof FilterPipeBlock) {
+            return state.getValue(FilterPipeBlock.INPUT) == direction
+                    || FilterPipeBlock.getStraightOutputDirection(state) == direction;
+        }
+
         if (state.getBlock() instanceof ItemPumpBlock) {
             return state.getValue(BlockStateProperties.FACING).getAxis() == direction.getAxis();
         }
@@ -1101,6 +1124,11 @@ public class PneumaticTubeBlockItem extends BlockItem {
     public boolean isCurveStartValid(Level level, CurveStart start) {
         if (start.isDeviderPort()) {
             BlockState state = level.getBlockState(start.pos);
+            if (state.getBlock() instanceof FilterPipeBlock) {
+                return start.isDeviderOutput()
+                        && start.direction == FilterPipeBlock.getStraightOutputDirection(state)
+                        && start.deviderSide == FilterPipeBlock.getBranchDirection(state);
+            }
             return state.getBlock() instanceof DeviderBlock
                     && (start.isDeviderInput()
                     ? start.direction == state.getValue(DeviderBlock.INPUT)

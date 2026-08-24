@@ -298,7 +298,7 @@ public final class TubeTransportManager {
             return false;
         }
         BlockPos previous = entry.state().pathIndex > 0 ? path.get(entry.state().pathIndex - 1) : null;
-        List<BlockPos> enabledOutputs = junction.forwardPorts(previous);
+        List<BlockPos> enabledOutputs = junction.forwardPorts(previous, entry.cargo().stack());
         BlockPos currentOutput = path.get(nextIndex);
         if (enabledOutputs.contains(currentOutput)
                 && level.getBlockEntity(currentOutput) instanceof PneumaticTubeBlockEntity) {
@@ -315,7 +315,8 @@ public final class TubeTransportManager {
             TubePath alternatePath = TubeNetworkPathfinder.findPathFromOccupiedTube(
                     level,
                     entry.state().owner(),
-                    alternate
+                    alternate,
+                    entry.cargo().stack()
             );
             if (alternatePath.isEmpty() || alternatePath.spillsAtEnd()) {
                 continue;
@@ -527,7 +528,8 @@ public final class TubeTransportManager {
         TubePath extension = TubeNetworkPathfinder.findPathToInsertConnector(
                 level,
                 entry.state().owner(),
-                target
+                target,
+                entry.cargo().stack()
         );
         if (extension.isEmpty()) {
             return false;
@@ -591,12 +593,12 @@ public final class TubeTransportManager {
         if (level.getBlockEntity(current) instanceof TransportJunction junction) {
             BlockPos previous = currentIndex > 0 ? path.get(currentIndex - 1) : entry.route().sourceConnector();
             finishingReservation = isReservedMergerPassage(entry, currentIndex);
-            if (!finishingReservation && !junction.forwardPorts(previous).contains(next)) {
+            if (!finishingReservation && !junction.forwardPorts(previous, entry.cargo().stack()).contains(next)) {
                 return false;
             }
         }
         if (level.getBlockEntity(next) instanceof TransportJunction junction) {
-            if (junction.forwardPorts(current).isEmpty()) {
+            if (junction.forwardPorts(current, entry.cargo().stack()).isEmpty()) {
                 return false;
             }
             if (junction.isBranchPort(current) && !junction.canMergeFrom(level, current)) {
@@ -615,7 +617,7 @@ public final class TubeTransportManager {
             return false;
         }
         if (level.getBlockEntity(afterPump) instanceof TransportJunction junction) {
-            if (junction.forwardPorts(next).isEmpty()) {
+            if (junction.forwardPorts(next, entry.cargo().stack()).isEmpty()) {
                 return false;
             }
             if (junction.isBranchPort(next) && !junction.canMergeFrom(level, next)) {

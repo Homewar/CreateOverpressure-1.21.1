@@ -163,7 +163,12 @@ public class CapsulePortBlockEntity extends SmartBlockEntity implements Transpor
             return false;
         }
 
-        TubePath path = TubeNetworkPathfinder.findPathToInsertConnector(level, worldPosition, firstPathPos);
+        TubePath path = TubeNetworkPathfinder.findPathToInsertConnector(
+                level,
+                worldPosition,
+                firstPathPos,
+                sealedPackage
+        );
         if (path.isEmpty()) {
             return false;
         }

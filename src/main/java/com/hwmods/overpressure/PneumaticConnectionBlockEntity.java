@@ -67,7 +67,12 @@ public class PneumaticConnectionBlockEntity extends SmartBlockEntity implements 
             return;
         }
 
-        TubePath path = TubeNetworkPathfinder.findPathToInsertConnector(level, worldPosition, firstTubePos);
+        TubePath path = TubeNetworkPathfinder.findPathToInsertConnector(
+                level,
+                worldPosition,
+                firstTubePos,
+                simulated
+        );
 
         if (path.isEmpty()) {
             return;
@@ -121,13 +126,18 @@ public class PneumaticConnectionBlockEntity extends SmartBlockEntity implements 
             return stack;
         }
 
-        TubePath path = TubeNetworkPathfinder.findPathToInsertConnector(level, worldPosition, firstTubePos);
+        ItemStack capsule = stack.copyWithCount(1);
+        TubePath path = TubeNetworkPathfinder.findPathToInsertConnector(
+                level,
+                worldPosition,
+                firstTubePos,
+                capsule
+        );
         if (path.isEmpty()) {
             return stack;
         }
 
         PneumaticTubeBlockEntity firstTube = findFirstTubeOnPath(level, path);
-        ItemStack capsule = stack.copyWithCount(1);
         if (firstTube == null || !firstTube.canAcceptItem(capsule, path)) {
             return stack;
         }

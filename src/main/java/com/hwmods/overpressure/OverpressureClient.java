@@ -25,6 +25,9 @@ public class OverpressureClient {
     public static final ModelResourceLocation DEVIDER_MERGE_BLOCK_MODEL = ModelResourceLocation.standalone(
             ResourceLocation.fromNamespaceAndPath(Overpressure.MODID, "block/devider/divider_merge")
     );
+    public static final ModelResourceLocation FILTER_PIPE_BLOCK_MODEL = ModelResourceLocation.standalone(
+            ResourceLocation.fromNamespaceAndPath(Overpressure.MODID, "block/filter_pipe/filter_pipe")
+    );
     public OverpressureClient(IEventBus modBus, ModContainer container) {
         ItemPumpRenderer.init();
         modBus.addListener(OverpressureClient::onClientSetup);
@@ -67,6 +70,10 @@ public class OverpressureClient {
                 DeviderRenderer::new
         );
         event.registerBlockEntityRenderer(
+                ModBlockEntities.FILTER_PIPE.get(),
+                FilterPipeRenderer::new
+        );
+        event.registerBlockEntityRenderer(
                 ModBlockEntities.VALVE.get(),
                 PneumaticTubeRenderer::new
         );
@@ -88,6 +95,7 @@ public class OverpressureClient {
         event.register(PNEUMATIC_CAPSULE_MODEL);
         event.register(DEVIDER_BLOCK_MODEL);
         event.register(DEVIDER_MERGE_BLOCK_MODEL);
+        event.register(FILTER_PIPE_BLOCK_MODEL);
     }
 
     static void registerParticleProviders(RegisterParticleProvidersEvent event) {

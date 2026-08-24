@@ -4,7 +4,10 @@ import com.mojang.logging.LogUtils;
 import com.hwmods.overpressure.compat.create.PneumaticConnectionArmInteractionPoint;
 import com.simibubi.create.api.stress.BlockStressValues;
 import com.simibubi.create.content.decoration.encasing.EncasingRegistry;
+import com.simibubi.create.foundation.item.ItemDescription;
+import com.simibubi.create.foundation.item.TooltipModifier;
 
+import net.createmod.catnip.lang.FontHelper;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -35,6 +38,13 @@ public class Overpressure {
             EncasingRegistry.addVariant(ModBlocks.PNEUMATIC_TUBE.get(), ModBlocks.ANDESITE_ENCASED_PNEUMATIC_TUBE.get());
             EncasingRegistry.addVariant(ModBlocks.PNEUMATIC_TUBE.get(), ModBlocks.BRASS_ENCASED_PNEUMATIC_TUBE.get());
             EncasingRegistry.addVariant(ModBlocks.PNEUMATIC_TUBE.get(), ModBlocks.COPPER_ENCASED_PNEUMATIC_TUBE.get());
+            TooltipModifier.REGISTRY.register(
+                    ModBlocks.FILTER_PIPE_ITEM.get(),
+                    new ItemDescription.Modifier(
+                            ModBlocks.FILTER_PIPE_ITEM.get(),
+                            FontHelper.Palette.STANDARD_CREATE
+                    )
+            );
             SimulatedCompat.register();
         });
     }

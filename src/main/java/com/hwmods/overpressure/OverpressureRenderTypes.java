@@ -12,6 +12,10 @@ public final class OverpressureRenderTypes {
             Overpressure.MODID,
             "textures/block/item_pipe_texture/curve_tube.png"
     );
+    private static final ResourceLocation PONDER_CURVE_TUBE_TEXTURE = ResourceLocation.fromNamespaceAndPath(
+            Overpressure.MODID,
+            "textures/block/item_pipe_texture/ponder_only/curve_tube.png"
+    );
     private static final ResourceLocation TUBE_CORE_TEXTURE = ResourceLocation.fromNamespaceAndPath(
             Overpressure.MODID,
             "textures/block/item_pipe_texture/core.png"
@@ -42,17 +46,17 @@ public final class OverpressureRenderTypes {
             VertexFormat.Mode.QUADS,
             1536,
             true,
-            true,
+            false,
             RenderType.CompositeState.builder()
-                    .setShaderState(RenderStateShard.RENDERTYPE_ENTITY_TRANSLUCENT_SHADER)
-                    .setTextureState(new RenderStateShard.TextureStateShard(CURVE_TUBE_TEXTURE, false, false))
-                    .setTransparencyState(RenderStateShard.TRANSLUCENT_TRANSPARENCY)
+                    .setShaderState(RenderStateShard.RENDERTYPE_ENTITY_CUTOUT_SHADER)
+                    .setTextureState(new RenderStateShard.TextureStateShard(PONDER_CURVE_TUBE_TEXTURE, false, false))
+                    .setTransparencyState(RenderStateShard.NO_TRANSPARENCY)
                     .setOutputState(RenderStateShard.MAIN_TARGET)
                     .setCullState(RenderStateShard.NO_CULL)
                     .setLightmapState(RenderStateShard.LIGHTMAP)
                     .setOverlayState(RenderStateShard.OVERLAY)
-                    .setWriteMaskState(RenderStateShard.COLOR_WRITE)
-                    .createCompositeState(true)
+                    .setWriteMaskState(RenderStateShard.COLOR_DEPTH_WRITE)
+                    .createCompositeState(false)
     );
 
     public static RenderType curveTube() {

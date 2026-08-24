@@ -82,9 +82,38 @@ public class CapsulePortBlock extends BaseEntityBlock implements IWrenchable {
 
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
+        Direction facing = context.getClickedFace();
+        Direction adjacentLine = findAdjacentPneumaticLine(context);
+        if (adjacentLine != null) {
+            facing = adjacentLine.getOpposite();
+        }
+
         return defaultBlockState()
-                .setValue(FACING, context.getClickedFace())
+                .setValue(FACING, facing)
                 .setValue(POWERED, context.getLevel().hasNeighborSignal(context.getClickedPos()));
+    }
+
+    @Nullable
+    private static Direction findAdjacentPneumaticLine(BlockPlaceContext context) {
+        Level level = context.getLevel();
+        BlockPos pos = context.getClickedPos();
+        Direction clickedNeighbor = context.getClickedFace().getOpposite();
+
+        if (PneumaticLine.isPathNode(level, pos.relative(clickedNeighbor))) {
+            return clickedNeighbor;
+        }
+
+        Player player = context.getPlayer();
+        Direction[] directions = player == null
+                ? Direction.values()
+                : Direction.orderedByNearest(player);
+        for (Direction direction : directions) {
+            if (PneumaticLine.isPathNode(level, pos.relative(direction))) {
+                return direction;
+            }
+        }
+
+        return null;
     }
 
     public static Direction getOutputDirection(BlockState state) {

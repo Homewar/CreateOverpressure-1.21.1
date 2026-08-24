@@ -66,6 +66,16 @@ public class ModBlockEntities {
                     )
             );
 
+        public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<FilterPipeBlockEntity>> FILTER_PIPE =
+            BLOCK_ENTITIES.register(
+                    "filter_pipe",
+                    () -> new BlockEntityType<>(
+                            FilterPipeBlockEntity::new,
+                            Set.of(ModBlocks.FILTER_PIPE.get()),
+                            null
+                    )
+            );
+
         public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ValveBlockEntity>> VALVE =
             BLOCK_ENTITIES.register(
                     "valve",

@@ -97,6 +97,7 @@ public record TubeGraphRoute(List<Step> steps) {
         CAPSULE_PORT,
         PUMP,
         JUNCTION,
+        FILTER_ROUTER,
         VALVE,
         SENSOR,
         OPEN_END,

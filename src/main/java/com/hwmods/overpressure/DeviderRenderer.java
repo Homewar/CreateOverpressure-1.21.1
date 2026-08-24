@@ -69,7 +69,7 @@ public class DeviderRenderer extends PneumaticTubeRenderer {
         poseStack.popPose();
     }
 
-    private static void applyMainRotation(PoseStack poseStack, Direction main) {
+    static void applyMainRotation(PoseStack poseStack, Direction main) {
         switch (main) {
             case DOWN -> poseStack.mulPose(Axis.XP.rotationDegrees(180));
             case NORTH -> poseStack.mulPose(Axis.XP.rotationDegrees(-90));
@@ -81,7 +81,7 @@ public class DeviderRenderer extends PneumaticTubeRenderer {
         }
     }
 
-    private static int findRoll(Direction main, Direction targetFront) {
+    static int findRoll(Direction main, Direction targetFront) {
         for (int roll : new int[] { 0, 90, 180, 270 }) {
             if (transformFront(main, roll) == targetFront) {
                 return roll;

@@ -77,13 +77,9 @@ public final class PneumaticLine {
                 return false;
             }
             if (junction.isStraightPort(to)) {
-                return junction.isMerger()
-                        && (toBlockEntity instanceof PneumaticTubeBlockEntity
-                        || (toBlockEntity instanceof TransportNodeComponent node && !node.hasCargoSlot()));
+                return junction.isMerger() && junction.isPortUsable(level, to);
             }
-            return junction.isBranchOutputEnabled(to)
-                    && level.getBlockState(to).getBlock() instanceof CurvaturePneumaticTubeBlock
-                    && toBlockEntity instanceof PneumaticTubeBlockEntity;
+            return junction.isBranchOutputEnabled(to) && junction.isPortUsable(level, to);
         }
 
         if (toBlockEntity instanceof TransportJunction junction) {
@@ -93,13 +89,9 @@ public final class PneumaticLine {
                 return false;
             }
             if (junction.isStraightPort(from)) {
-                return !junction.isMerger()
-                        && (fromBlockEntity instanceof PneumaticTubeBlockEntity
-                        || (fromBlockEntity instanceof TransportNodeComponent node && !node.hasCargoSlot()));
+                return !junction.isMerger() && junction.isPortUsable(level, from);
             }
-            return junction.isBranchInputEnabled(from)
-                    && level.getBlockState(from).getBlock() instanceof CurvaturePneumaticTubeBlock
-                    && fromBlockEntity instanceof PneumaticTubeBlockEntity;
+            return junction.isBranchInputEnabled(from) && junction.isPortUsable(level, from);
         }
 
         Direction direction = getDirectionBetween(from, to);

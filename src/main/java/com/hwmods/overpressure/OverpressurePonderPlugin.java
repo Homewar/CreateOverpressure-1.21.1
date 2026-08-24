@@ -2,9 +2,13 @@ package com.hwmods.overpressure;
 
 import java.util.List;
 
+import com.hwmods.overpressure.mixin.ArmBlockEntityAccessor;
 import com.simibubi.create.AllItems;
 import com.simibubi.create.AllBlocks;
+import com.simibubi.create.content.kinetics.mechanicalArm.ArmBlockEntity;
+import com.simibubi.create.content.logistics.box.PackageItem;
 import com.simibubi.create.content.logistics.box.PackageStyles;
+import com.simibubi.create.content.logistics.depot.DepotBlockEntity;
 import com.simibubi.create.content.logistics.packager.PackagerBlockEntity;
 import com.simibubi.create.content.redstone.link.RedstoneLinkBlock;
 
@@ -51,7 +55,8 @@ public class OverpressurePonderPlugin implements PonderPlugin {
                 .addStoryBoard("item_pump", pumpSpeedScene());
 
         helper.forComponents(rl("pneumatic_connection"))
-                .addStoryBoard("pneumatic_connection", connectorScene());
+                .addStoryBoard("pneumatic_connection", connectorScene())
+                .addStoryBoard("autohand_marchruting", armCapsuleRoutingScene());
 
         helper.forComponents(ResourceLocation.fromNamespaceAndPath("create", "packager"))
                 .addStoryBoard("packagers", packagerScene());
@@ -61,6 +66,13 @@ public class OverpressurePonderPlugin implements PonderPlugin {
 
         helper.forComponents(rl("clog_sensor"))
                 .addStoryBoard("flow_sensor_pounder", flowSensorScene());
+
+        helper.forComponents(rl("filter_pipe"))
+                .addStoryBoard("filter_pipe", filterPipeScene());
+
+        helper.forComponents(rl("capsule_port"))
+                .addStoryBoard("hand_port", capsulePortScene());
+
     }
 
     private ResourceLocation rl(String path) {
@@ -442,6 +454,330 @@ public class OverpressurePonderPlugin implements PonderPlugin {
             scene.idle(25);
             scene.markAsFinished();
         };
+    }
+
+    private PonderStoryBoard filterPipeScene() {
+        return (SceneBuilder scene, SceneBuildingUtil util) -> {
+            scene.title("filter_pipe", "Filtered Pneumatic Pipe");
+            scene.scaleSceneView(0.9f);
+            revealScene(scene, util);
+            scene.idle(15);
+
+            BlockPos filterPipe = new BlockPos(2, 1, 2);
+            BlockPos source = new BlockPos(5, 1, 2);
+            List<BlockPos> straightPath = List.of(
+                    new BlockPos(4, 1, 2),
+                    new BlockPos(3, 1, 2),
+                    filterPipe,
+                    new BlockPos(1, 1, 2),
+                    new BlockPos(0, 1, 2)
+            );
+            List<BlockPos> branchPath = List.of(
+                    new BlockPos(4, 1, 2),
+                    new BlockPos(3, 1, 2),
+                    filterPipe,
+                    new BlockPos(2, 1, 3),
+                    new BlockPos(1, 1, 3),
+                    new BlockPos(0, 1, 3)
+            );
+            ItemStack configuredFilter = itemFilterFor(new ItemStack(Items.GOLD_BLOCK));
+
+            scene.overlay().showOutline(PonderPalette.GREEN, new Object(),
+                    util.select().position(filterPipe), 65);
+            scene.overlay().showText(65)
+                    .text("The Filtered Pneumatic Pipe separates matching blocks from the rest of the flow.")
+                    .pointAt(util.vector().centerOf(filterPipe))
+                    .placeNearTarget();
+            scene.idle(75);
+
+            Vec3 filterSlot = util.vector().centerOf(filterPipe).add(0, 0, -0.45);
+            scene.overlay().showControls(filterSlot, Pointing.DOWN, 45)
+                    .rightClick()
+                    .withItem(configuredFilter);
+            scene.world().modifyBlockEntity(filterPipe, FilterPipeBlockEntity.class,
+                    pipe -> pipe.setFilter(configuredFilter));
+            scene.effects().indicateSuccess(filterPipe);
+            scene.overlay().showText(65)
+                    .text("Insert an item or a configured Create Filter into the white filter slot.")
+                    .pointAt(filterSlot)
+                    .placeNearTarget();
+            scene.idle(75);
+
+            scene.overlay().showOutline(PonderPalette.OUTPUT, new Object(),
+                    util.select().fromTo(0, 1, 2, 1, 1, 2), 65);
+            scene.overlay().showText(65)
+                    .text("Blocks that do not match the filter continue straight ahead.")
+                    .pointAt(util.vector().centerOf(new BlockPos(1, 1, 2)))
+                    .placeNearTarget();
+            runPonderFlow(
+                    scene, straightPath, straightPath, source, new BlockPos(-1, 1, 2),
+                    new ItemStack(Items.IRON_BLOCK), 10, 70, 90, true
+            );
+
+            scene.overlay().showOutline(PonderPalette.GREEN, new Object(),
+                    util.select().fromTo(0, 1, 3, 2, 1, 3), 65);
+            scene.overlay().showText(65)
+                    .text("Matching blocks are diverted into the curved branch.")
+                    .pointAt(util.vector().centerOf(new BlockPos(2, 1, 3)))
+                    .placeNearTarget();
+            runPonderFlow(
+                    scene, branchPath, branchPath, source, new BlockPos(-1, 1, 3),
+                    new ItemStack(Items.GOLD_BLOCK), 10, 70, 90, true
+            );
+
+            clearPonderFlow(scene, straightPath);
+            clearPonderFlow(scene, branchPath);
+            scene.markAsFinished();
+        };
+    }
+
+    private PonderStoryBoard capsulePortScene() {
+        return (SceneBuilder scene, SceneBuildingUtil util) -> {
+            scene.title("hand_port", "Capsule Port");
+            scene.scaleSceneView(0.9f);
+            revealScene(scene, util);
+            scene.idle(15);
+
+            BlockPos portPos = new BlockPos(2, 1, 2);
+            List<BlockPos> path = List.of(
+                    new BlockPos(2, 2, 2),
+                    new BlockPos(2, 3, 2)
+            );
+            ItemStack loadedItems = new ItemStack(Items.IRON_INGOT, 16);
+            ItemStack packageStack = PackageStyles.getDefaultBox();
+
+            scene.overlay().showOutline(PonderPalette.GREEN, new Object(),
+                    util.select().position(portPos), 65);
+            scene.overlay().showText(65)
+                    .text("The Capsule Port lets a player send items into a pneumatic network by hand.")
+                    .pointAt(util.vector().centerOf(portPos))
+                    .placeNearTarget();
+            scene.idle(75);
+
+            scene.overlay().showControls(util.vector().centerOf(portPos).add(0.65, 0, 0),
+                            Pointing.DOWN, 50)
+                    .rightClick()
+                    .withItem(loadedItems);
+            scene.world().modifyBlockEntity(portPos, CapsulePortBlockEntity.class,
+                    port -> port.insertFromPlayer(loadedItems));
+            scene.effects().indicateSuccess(portPos);
+            scene.overlay().showText(65)
+                    .text("Right-click the port with items to load them into its capsule.")
+                    .pointAt(util.vector().centerOf(portPos))
+                    .placeNearTarget();
+            scene.idle(75);
+
+            scene.world().modifyBlockEntity(portPos, CapsulePortBlockEntity.class, port -> {
+                port.takeLastItem();
+            });
+            scene.world().modifyBlock(portPos,
+                    state -> state.setValue(CapsulePortBlock.OPEN, false)
+                            .setValue(CapsulePortBlock.POWERED, true), true);
+            scene.effects().indicateRedstone(portPos);
+            scene.overlay().showText(70)
+                    .text("A redstone signal seals the loaded items and dispatches the capsule through the network.")
+                    .pointAt(util.vector().centerOf(portPos))
+                    .placeNearTarget();
+            runPonderFlow(
+                    scene, path, path, portPos, new BlockPos(2, 4, 2),
+                    packageStack, 10, 75, 90, true
+            );
+
+            clearPonderFlow(scene, path);
+            scene.markAsFinished();
+        };
+    }
+
+    private PonderStoryBoard armCapsuleRoutingScene() {
+        return (SceneBuilder scene, SceneBuildingUtil util) -> {
+            scene.title("arm_capsule_routing", "Routing Capsules with Mechanical Arms");
+            scene.configureBasePlate(0, 0, 9);
+            scene.scaleSceneView(0.75f);
+            scene.world().showSection(util.select().layer(0), Direction.UP);
+            scene.idle(5);
+            scene.world().showSection(util.select().layersFrom(1), Direction.DOWN);
+            scene.idle(15);
+
+            BlockPos armPos = new BlockPos(4, 1, 4);
+            BlockPos depotPos = new BlockPos(6, 1, 4);
+            BlockPos workshopConnector = new BlockPos(3, 1, 7);
+            BlockPos storageConnector = new BlockPos(4, 1, 7);
+            BlockPos fallbackConnector = new BlockPos(5, 1, 7);
+            BlockPos workshopTube = workshopConnector.south();
+            BlockPos storageTube = storageConnector.south();
+            BlockPos fallbackTube = fallbackConnector.south();
+            ItemStack workshopFilter = addressFilter("Workshop");
+            ItemStack storageFilter = addressFilter("Storage");
+            ItemStack storagePackage = addressedPackage("Storage");
+            ItemStack unnamedPackage = PackageStyles.getDefaultBox();
+            ItemStack unmatchedPackage = addressedPackage("Office");
+
+            returnArmToDepot(scene, armPos);
+            scene.idle(34);
+
+            scene.overlay().showOutline(PonderPalette.GREEN, new Object(),
+                    util.select().position(armPos), 160);
+            scene.overlay().showText(160)
+                    .text("A Mechanical Arm can act as a router for packages entering the depot.")
+                    .pointAt(util.vector().centerOf(armPos).add(0, 0.75, 0))
+                    .placeNearTarget();
+            routePackagesDuringText(
+                    scene, armPos, depotPos, fallbackConnector, fallbackTube,
+                    unnamedPackage, 0, 2
+            );
+
+            scene.world().modifyBlockEntity(workshopConnector, PneumaticConnectionBlockEntity.class,
+                    connector -> connector.setFilter(workshopFilter));
+            scene.world().modifyBlockEntity(storageConnector, PneumaticConnectionBlockEntity.class,
+                    connector -> connector.setFilter(storageFilter));
+            scene.overlay().showControls(util.vector().topOf(workshopConnector), Pointing.DOWN, 160)
+                    .rightClick()
+                    .withItem(workshopFilter);
+            scene.overlay().showControls(util.vector().topOf(storageConnector), Pointing.DOWN, 160)
+                    .rightClick()
+                    .withItem(storageFilter);
+            scene.overlay().showOutline(PonderPalette.GREEN, new Object(),
+                    util.select().position(workshopConnector), 160);
+            scene.overlay().showOutline(PonderPalette.GREEN, new Object(),
+                    util.select().position(storageConnector), 160);
+            scene.overlay().showText(160)
+                    .text("Put a Package Filter with an address into each destination connector.")
+                    .pointAt(util.vector().topOf(storageConnector))
+                    .placeNearTarget();
+            routePackagesDuringText(
+                    scene, armPos, depotPos, storageConnector, storageTube,
+                    storagePackage, 1, 2
+            );
+
+            scene.overlay().showOutline(PonderPalette.OUTPUT, new Object(),
+                    util.select().position(storageConnector), 160);
+            scene.overlay().showText(160)
+                    .text("The arm compares the box address and carries it to the matching connector.")
+                    .pointAt(util.vector().centerOf(storageConnector))
+                    .placeNearTarget();
+            routePackagesDuringText(
+                    scene, armPos, depotPos, storageConnector, storageTube,
+                    storagePackage, 1, 2
+            );
+
+            scene.overlay().showOutline(PonderPalette.OUTPUT, new Object(),
+                    util.select().position(fallbackConnector), 160);
+            scene.overlay().showText(160)
+                    .text("Leave one connector unfiltered as the fallback route for boxes without an address.")
+                    .pointAt(util.vector().topOf(fallbackConnector))
+                    .placeNearTarget();
+            routePackagesDuringText(
+                    scene, armPos, depotPos, fallbackConnector, fallbackTube,
+                    unnamedPackage, 0, 2
+            );
+
+            scene.overlay().showOutline(PonderPalette.OUTPUT, new Object(),
+                    util.select().position(fallbackConnector), 160);
+            scene.overlay().showText(160)
+                    .text("The fallback also receives named boxes whose address matches none of the filtered outputs.")
+                    .pointAt(util.vector().topOf(fallbackConnector))
+                    .placeNearTarget();
+            routePackagesDuringText(
+                    scene, armPos, depotPos, fallbackConnector, fallbackTube,
+                    unmatchedPackage, 0, 2
+            );
+
+            clearPonderFlow(scene, List.of(workshopTube, storageTube, fallbackTube));
+            scene.world().modifyBlockEntity(armPos, ArmBlockEntity.class, arm -> arm.setSpeed(0));
+            scene.markAsFinished();
+        };
+    }
+
+    private static ItemStack itemFilterFor(ItemStack filteredStack) {
+        ItemStack filter = AllItems.FILTER.asStack();
+        AllItems.FILTER.get().getFilterItemHandler(filter).setStackInSlot(0, filteredStack.copy());
+        return filter;
+    }
+
+    private static ItemStack addressFilter(String address) {
+        ItemStack filter = AllItems.PACKAGE_FILTER.asStack();
+        PackageItem.addAddress(filter, address);
+        return filter;
+    }
+
+    private static ItemStack addressedPackage(String address) {
+        ItemStack packageStack = PackageStyles.getDefaultBox();
+        PackageItem.addAddress(packageStack, address);
+        return packageStack;
+    }
+
+    private static void moveArmToOutput(
+            SceneBuilder scene,
+            BlockPos armPos,
+            ItemStack packageStack,
+            int outputIndex
+    ) {
+        scene.world().modifyBlockEntity(armPos, ArmBlockEntity.class, arm -> {
+            var registries = arm.getLevel().registryAccess();
+            var tag = arm.saveWithFullMetadata(registries);
+            tag.putString("Phase", ArmBlockEntity.Phase.MOVE_TO_OUTPUT.name());
+            tag.putInt("TargetPointIndex", outputIndex);
+            tag.putFloat("MovementProgress", 0);
+            tag.put("HeldItem", packageStack.save(registries));
+            ((ArmBlockEntityAccessor) arm).overpressure$readPonderState(tag, registries, true);
+            arm.setSpeed(32);
+            arm.setChanged();
+        });
+    }
+
+    private static void clearArmCargo(SceneBuilder scene, BlockPos armPos) {
+        scene.world().modifyBlockEntity(armPos, ArmBlockEntity.class, arm -> {
+            ((ArmBlockEntityAccessor) arm).overpressure$setHeldItem(ItemStack.EMPTY);
+            arm.setChanged();
+        });
+    }
+
+    private static void routePackagesDuringText(
+            SceneBuilder scene,
+            BlockPos armPos,
+            BlockPos depotPos,
+            BlockPos connectorPos,
+            BlockPos tubePos,
+            ItemStack packageStack,
+            int outputIndex,
+            int cycles
+    ) {
+        List<BlockPos> path = List.of(tubePos);
+        for (int cycle = 0; cycle < cycles; cycle++) {
+            scene.world().modifyBlockEntity(depotPos, DepotBlockEntity.class,
+                    depot -> depot.setHeldItem(packageStack.copy()));
+            scene.idle(12);
+
+            scene.world().modifyBlockEntity(depotPos, DepotBlockEntity.class,
+                    DepotBlockEntity::clearContent);
+            moveArmToOutput(scene, armPos, packageStack, outputIndex);
+            scene.idle(34);
+
+            clearArmCargo(scene, armPos);
+            clearPonderFlow(scene, path);
+            scene.world().modifyBlockEntity(tubePos, PneumaticTubeBlockEntity.class,
+                    tube -> tube.startPonderTransport(
+                            packageStack, path, connectorPos, tubePos.south(), 8));
+            returnArmToDepot(scene, armPos);
+            tickPonderFlow(scene, path, path, 34, true);
+        }
+    }
+
+    private static void returnArmToDepot(
+            SceneBuilder scene,
+            BlockPos armPos
+    ) {
+        scene.world().modifyBlockEntity(armPos, ArmBlockEntity.class, arm -> {
+            var registries = arm.getLevel().registryAccess();
+            var tag = arm.saveWithFullMetadata(registries);
+            tag.putString("Phase", ArmBlockEntity.Phase.MOVE_TO_INPUT.name());
+            tag.putInt("TargetPointIndex", 0);
+            tag.putFloat("MovementProgress", 0);
+            tag.remove("HeldItem");
+            ((ArmBlockEntityAccessor) arm).overpressure$readPonderState(tag, registries, true);
+            arm.setSpeed(32);
+            arm.setChanged();
+        });
     }
 
     private static void startPackagerAnimation(

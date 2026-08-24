@@ -409,6 +409,20 @@ public class PneumaticTubeRenderer implements BlockEntityRenderer<PneumaticTubeB
             return interpolatePath(points, progress);
         }
 
+        if (segmentBlockEntity instanceof FilterPipeBlockEntity filterPipe && pathIndex + 1 < item.path.size()) {
+            BlockPos next = item.path.get(pathIndex + 1);
+            if (filterPipe.getBranchPosition().equals(next)) {
+                List<Vec3> points = new ArrayList<>();
+                addSourcePrefix(points, currentPos, item, pathIndex);
+                points.add(offset.add(0.5, 0.5, 0.5));
+                points.add(offset.add(DeviderBlockEntity.getLocalOutputPoint(
+                        filterPipe.getBranchDirection(),
+                        filterPipe.getInputDirection()
+                )));
+                return interpolatePath(points, progress);
+            }
+        }
+
         if (segmentBlockEntity instanceof CurvaturePneumaticTubeEntity curvatureTube) {
             boolean reversed = isCurveReversed(currentPos, item, pathIndex, curvatureTube);
             if (item.sourceConnector == null || pathIndex != item.startPathIndex) {

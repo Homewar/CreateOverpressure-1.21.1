@@ -19,22 +19,42 @@ import com.hwmods.overpressure.transport.TransportNodeComponent;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 
 public final class TubeNetworkPathfinder {
     public static TubePath findPathToInsertConnector(Level level, BlockPos sourceConnector, BlockPos firstTube) {
-        return findPathToConnector(level, sourceConnector, firstTube, false);
+        return findPathToInsertConnector(level, sourceConnector, firstTube, ItemStack.EMPTY);
+    }
+
+    public static TubePath findPathToInsertConnector(
+            Level level,
+            BlockPos sourceConnector,
+            BlockPos firstTube,
+            ItemStack cargo
+    ) {
+        return findPathToConnector(level, sourceConnector, firstTube, false, cargo);
     }
 
     public static TubePath findPathFromOccupiedTube(Level level, BlockPos sourceTube, BlockPos firstTube) {
-        return findPathToConnector(level, sourceTube, firstTube, true);
+        return findPathFromOccupiedTube(level, sourceTube, firstTube, ItemStack.EMPTY);
+    }
+
+    public static TubePath findPathFromOccupiedTube(
+            Level level,
+            BlockPos sourceTube,
+            BlockPos firstTube,
+            ItemStack cargo
+    ) {
+        return findPathToConnector(level, sourceTube, firstTube, true, cargo);
     }
 
     private static TubePath findPathToConnector(
             Level level,
             BlockPos sourceConnector,
             BlockPos firstTube,
-            boolean allowOccupiedFirstTube
+            boolean allowOccupiedFirstTube,
+            ItemStack cargo
     ) {
         if (!isPathNode(level, firstTube)) {
             return new TubePath(List.of(), null);
@@ -123,9 +143,9 @@ public final class TubeNetworkPathfinder {
                 }
             }
 
-            BlockPos saturatedPreferredBranch = getSaturatedPreferredBranch(level, current, previousPos);
+            BlockPos saturatedPreferredBranch = getSaturatedPreferredBranch(level, current, previousPos, cargo);
 
-            for (BlockPos next : getSearchNeighbors(level, current, previousPos)) {
+            for (BlockPos next : getSearchNeighbors(level, current, previousPos, cargo)) {
                 if (next.equals(sourceConnector)) {
                     continue;
                 }
@@ -147,7 +167,7 @@ public final class TubeNetworkPathfinder {
                 }
 
                 RouteScore nextScore = new RouteScore(
-                        node.score.branchPenalty + getDeviderBranchPenalty(level, current, previousPos, next),
+                        node.score.branchPenalty + getDeviderBranchPenalty(level, current, previousPos, next, cargo),
                         node.score.distance + 1
                 );
                 RouteScore previousScore = bestScores.get(next);
@@ -185,13 +205,18 @@ public final class TubeNetworkPathfinder {
         return false;
     }
 
-    private static List<BlockPos> getSearchNeighbors(Level level, BlockPos current, BlockPos previous) {
+    private static List<BlockPos> getSearchNeighbors(
+            Level level,
+            BlockPos current,
+            BlockPos previous,
+            ItemStack cargo
+    ) {
         if (!(level.getBlockEntity(current) instanceof TransportJunction junction) || previous == null) {
             return PneumaticLine.getForwardNeighbors(level, current, previous);
         }
 
         if (junction.isStraightPort(previous)) {
-            return junction.orderedBranchPorts();
+            return junction.orderedBranchPorts(cargo);
         }
         if (junction.isBranchPort(previous)) {
             return List.of(junction.straightPort());
@@ -223,28 +248,26 @@ public final class TubeNetworkPathfinder {
     }
 
     private static boolean isUsableJunctionPort(Level level, TransportJunction junction, BlockPos portPos) {
-        if (junction.isStraightPort(portPos)) {
-            return level.getBlockEntity(portPos) instanceof PneumaticTubeBlockEntity
-                    || (level.getBlockEntity(portPos) instanceof TransportNodeComponent node
-                    && !node.hasCargoSlot());
-        }
-        return junction.isBranchPort(portPos)
-                && level.getBlockState(portPos).getBlock() instanceof CurvaturePneumaticTubeBlock
-                && level.getBlockEntity(portPos) instanceof PneumaticTubeBlockEntity;
+        return junction.isPortUsable(level, portPos);
     }
 
     @Nullable
     private static BlockPos getSaturatedPreferredBranch(
             Level level,
             BlockPos deviderPos,
-            BlockPos previousPos
+            BlockPos previousPos,
+            ItemStack cargo
     ) {
         if (!(level.getBlockEntity(deviderPos) instanceof TransportJunction junction)
                 || !junction.isStraightPort(previousPos)) {
             return null;
         }
 
-        BlockPos preferredBranch = junction.orderedBranchPorts().get(0);
+        List<BlockPos> orderedBranches = junction.orderedBranchPorts(cargo);
+        if (orderedBranches.isEmpty()) {
+            return null;
+        }
+        BlockPos preferredBranch = orderedBranches.get(0);
         if (!(level.getBlockEntity(preferredBranch) instanceof PneumaticTubeBlockEntity branchTube)
                 || !TubeTransportManager.get(level).isOccupied(preferredBranch)) {
             return null;
@@ -272,13 +295,15 @@ public final class TubeNetworkPathfinder {
             Level level,
             BlockPos from,
             BlockPos previous,
-            BlockPos to
+            BlockPos to,
+            ItemStack cargo
     ) {
         if (!(level.getBlockEntity(from) instanceof TransportJunction junction)
                 || !junction.isStraightPort(previous)) {
             return 0;
         }
-        return to.equals(junction.orderedBranchPorts().get(0)) ? 0 : 1;
+        List<BlockPos> orderedBranches = junction.orderedBranchPorts(cargo);
+        return !orderedBranches.isEmpty() && to.equals(orderedBranches.get(0)) ? 0 : 1;
     }
 
     private static int compareScores(RouteScore first, RouteScore second) {
