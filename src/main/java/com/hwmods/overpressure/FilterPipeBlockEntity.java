@@ -40,7 +40,6 @@ public class FilterPipeBlockEntity extends PneumaticTubeBlockEntity implements T
     public boolean routesToBranch(ItemStack cargo) {
         return filtering != null
                 && !filtering.getFilter().isEmpty()
-                && cargo.getItem() instanceof BlockItem
                 && filtering.test(cargo);
     }
 
