@@ -199,14 +199,10 @@ public class PneumaticConnectionBlockEntity extends SmartBlockEntity implements 
                 != PneumaticConnectionBlock.ConnectionMode.INSERT) {
             return false;
         }
-        Direction direction = Direction.getNearest(
-                worldPosition.getX() - sourcePos.getX(),
-                worldPosition.getY() - sourcePos.getY(),
-                worldPosition.getZ() - sourcePos.getZ()
-        );
-        return state.getValue(PneumaticConnectionBlock.FACING) == direction
-                && level.getBlockEntity(sourcePos) instanceof PneumaticTubeBlockEntity tube
-                && tube.canTravelTo(level, direction);
+        Direction facing = state.getValue(PneumaticConnectionBlock.FACING);
+        return worldPosition.relative(facing.getOpposite()).equals(sourcePos)
+                && PneumaticLine.isPathNode(level, sourcePos)
+                && PneumaticLine.isRouteAllowed(level, sourcePos, worldPosition);
     }
 
     @Override

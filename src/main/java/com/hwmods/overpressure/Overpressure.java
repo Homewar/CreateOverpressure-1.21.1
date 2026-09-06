@@ -29,6 +29,7 @@ public class Overpressure {
         ModParticleTypes.PARTICLE_TYPES.register(modBus);
         modBus.addListener(PneumaticConnectionArmInteractionPoint::register);
         modBus.addListener(this::commonSetup);
+        modBus.addListener(TubePlacementSyncPayload::register);
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
     }
 

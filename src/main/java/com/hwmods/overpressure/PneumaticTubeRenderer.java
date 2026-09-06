@@ -611,6 +611,19 @@ public class PneumaticTubeRenderer implements BlockEntityRenderer<PneumaticTubeB
         Vec3 p0 = curveOrigin.add(curvatureTube.getP0());
         Vec3 p3 = curveOrigin.add(curvatureTube.getP3());
 
+        // Curve owners follow a block grid path, which can be far from the
+        // rendered curve. Use the shared curve endpoint to determine direction.
+        if (curvatureTube.getLevel() != null && pathIndex + 1 < item.path.size()
+                && curvatureTube.getLevel().getBlockEntity(item.path.get(pathIndex + 1))
+                instanceof CurvaturePneumaticTubeEntity nextCurve) {
+            Vec3 nextOrigin = Vec3.atLowerCornerOf(nextCurve.getBlockPos().subtract(rendererPos));
+            Vec3 nextP0 = nextOrigin.add(nextCurve.getP0());
+            Vec3 nextP3 = nextOrigin.add(nextCurve.getP3());
+            double startDistance = Math.min(p0.distanceToSqr(nextP0), p0.distanceToSqr(nextP3));
+            double endDistance = Math.min(p3.distanceToSqr(nextP0), p3.distanceToSqr(nextP3));
+            return startDistance < endDistance;
+        }
+
         return p0.distanceToSqr(next) < p3.distanceToSqr(next);
     }
 

@@ -510,14 +510,21 @@ public final class TubeTransportManager {
 
     private boolean canInsertIntoTargetConnector(TransitEntry entry) {
         BlockPos target = entry.route().targetConnector();
+        // Cargo stays in the last tube while crossing a pump, so its owner
+        // need not be the path node directly connected to the destination.
+        List<BlockPos> path = entry.route().blockPath();
+        if (path.isEmpty()) {
+            return false;
+        }
+        BlockPos lastNode = path.getLast();
         return level.getBlockEntity(target) instanceof TransportEndpoint endpoint
-                && endpoint.canReceiveFrom(level, entry.state().owner());
+                && endpoint.canReceiveFrom(level, lastNode)
+                && canTravelToNextPathNode(entry, entry.state().pathIndex)
+                && PneumaticLine.isTravelAllowed(level, lastNode, target);
     }
 
     private boolean isRestoredInsertConnector(TransitEntry entry) {
-        BlockPos target = entry.route().targetConnector();
-        return level.getBlockEntity(target) instanceof TransportEndpoint endpoint
-                && endpoint.canReceiveFrom(level, entry.state().owner());
+        return canInsertIntoTargetConnector(entry);
     }
 
     private boolean restoreBlockedPath(TransitEntry entry) {

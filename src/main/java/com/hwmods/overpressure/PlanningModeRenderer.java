@@ -14,12 +14,14 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 
 import org.joml.Matrix4f;
 
@@ -32,6 +34,42 @@ public class PlanningModeRenderer {
     private static final Vec3 WORLD_EAST = new Vec3(1.0, 0.0, 0.0);
     private static final int VALID_ROUTE_COLOR = 0x58D68D;
     private static final int INVALID_ROUTE_COLOR = 0xE74C3C;
+    private static Level previewLevel;
+    private static Player previewPlayer;
+    private static long previewTick = Long.MIN_VALUE;
+    private static PneumaticTubeBlockItem.CurveStart previewStart;
+    private static PneumaticTubeBlockItem.PlacementPreview preview;
+
+    @SubscribeEvent
+    static void onDisconnect(ClientPlayerNetworkEvent.LoggingOut event) {
+        if (event.getPlayer() != null) {
+            PneumaticTubeBlockItem.clearClientCurveStart(event.getPlayer().getUUID());
+        }
+        preview = null;
+        previewLevel = null;
+        previewPlayer = null;
+        previewStart = null;
+        previewTick = Long.MIN_VALUE;
+    }
+
+    private static ItemStack tubeStack(Player player) {
+        return player.getMainHandItem().getItem() instanceof PneumaticTubeBlockItem
+                ? player.getMainHandItem() : player.getOffhandItem();
+    }
+
+    private static PneumaticTubeBlockItem.PlacementPreview getPreview(
+            Player player, PneumaticTubeBlockItem tubeItem, PneumaticTubeBlockItem.CurveStart start
+    ) {
+        if (preview == null || previewLevel != player.level() || previewPlayer != player
+                || previewTick != player.level().getGameTime() || !start.equals(previewStart)) {
+            previewLevel = player.level();
+            previewPlayer = player;
+            previewTick = previewLevel.getGameTime();
+            previewStart = start;
+            preview = tubeItem.previewPlacement(previewLevel, player, start);
+        }
+        return preview;
+    }
 
     @SubscribeEvent
     static void onRenderLevel(RenderLevelStageEvent event) {
@@ -42,35 +80,21 @@ public class PlanningModeRenderer {
         Minecraft minecraft = Minecraft.getInstance();
         Player player = minecraft.player;
 
-        if (player == null || !(player.getMainHandItem().getItem() instanceof PneumaticTubeBlockItem tubeItem)) {
+        if (player == null || !(tubeStack(player).getItem() instanceof PneumaticTubeBlockItem tubeItem)) {
             return;
         }
-
-        if (!(minecraft.hitResult instanceof BlockHitResult hit) || !player.level().isClientSide) {
-            return;
-        }
-
         Level level = player.level();
-        BlockPos clickedPos = hit.getBlockPos();
-        Direction clickedFace = hit.getDirection();
-        PneumaticTubeBlockItem.CurveStart start = PneumaticTubeBlockItem.getClientCurveStart(player.getUUID());
-        if (start != null && !tubeItem.isCurveStartValid(level, start)) {
-            PneumaticTubeBlockItem.clearClientCurveStart(player.getUUID());
-            start = null;
-        }
+        PneumaticTubeBlockItem.CurveStart start = tubeItem.getSelectedStart(level, player);
         if (start == null && !PlanningMode.isActive()) {
             return;
         }
-
-        PneumaticTubeBlockItem.PlanResult result = start == null
-                ? tubeItem.planSingle(level, clickedPos, clickedFace)
-                : tubeItem.planClientSection(level, start, clickedPos, clickedFace, hit.getLocation());
-
-        if (result.tubes().isEmpty() && start == null) {
-            result = tubeItem.planSingle(level, clickedPos, clickedFace);
-        }
-
-        if (result.tubes().isEmpty() && start == null) {
+        PneumaticTubeBlockItem.PlacementPreview route = start == null ? null : getPreview(player, tubeItem, start);
+        PneumaticTubeBlockItem.PlanResult result;
+        if (route != null) {
+            result = route.plan();
+        } else if (minecraft.hitResult instanceof BlockHitResult hit && hit.getType() == HitResult.Type.BLOCK) {
+            result = tubeItem.planSingle(level, hit.getBlockPos(), hit.getDirection());
+        } else {
             return;
         }
 
@@ -80,7 +104,8 @@ public class PlanningModeRenderer {
         poseStack.translate(-camera.x, -camera.y, -camera.z);
 
         MultiBufferSource.BufferSource buffers = minecraft.renderBuffers().bufferSource();
-        int routeColor = result.valid() ? VALID_ROUTE_COLOR : INVALID_ROUTE_COLOR;
+        boolean enoughItems = player.getAbilities().instabuild || tubeStack(player).getCount() >= result.tubes().size();
+        int routeColor = result.valid() && enoughItems ? VALID_ROUTE_COLOR : INVALID_ROUTE_COLOR;
         boolean hasStraightTubes = false;
 
         for (PneumaticTubeBlockItem.PlanTube tube : result.tubes()) {
@@ -90,6 +115,19 @@ public class PlanningModeRenderer {
             }
         }
         if (hasStraightTubes) {
+            buffers.endBatch(OverpressureRenderTypes.ghostTube());
+        }
+
+        if (route != null) {
+            Vec3 tip = Vec3.atCenterOf(route.endPos());
+            Vec3 forward = Vec3.atLowerCornerOf(route.outgoing().getNormal());
+            Vec3 right = forward.cross(route.outgoing().getAxis() == Direction.Axis.Y ? WORLD_EAST : WORLD_UP).normalize();
+            Vec3 arrowTip = tip.add(forward.scale(1.1));
+            VertexConsumer arrowBuffer = buffers.getBuffer(OverpressureRenderTypes.ghostTube());
+            Matrix4f pose = poseStack.last().pose();
+            drawCapsule(tip, arrowTip, pose, arrowBuffer, 0xF000F0, routeColor);
+            drawCapsule(arrowTip, arrowTip.subtract(forward.scale(0.4)).add(right.scale(0.3)), pose, arrowBuffer, 0xF000F0, routeColor);
+            drawCapsule(arrowTip, arrowTip.subtract(forward.scale(0.4)).subtract(right.scale(0.3)), pose, arrowBuffer, 0xF000F0, routeColor);
             buffers.endBatch(OverpressureRenderTypes.ghostTube());
         }
 
@@ -168,6 +206,10 @@ public class PlanningModeRenderer {
 
     private static void drawCapsule(Vec3 from, Vec3 to, Matrix4f pose, VertexConsumer buffer, int packedLight, int color) {
         Vec3 forward = to.subtract(from);
+        if (forward.lengthSqr() < 1.0E-8) {
+            return;
+        }
+        forward = forward.normalize();
         Vec3 reference = Math.abs(forward.y) > 0.92 ? new Vec3(1.0, 0.0, 0.0) : new Vec3(0.0, 1.0, 0.0);
         Vec3 right = forward.cross(reference).normalize().scale(HALF_SIZE);
         Vec3 up = right.cross(forward).normalize().scale(HALF_SIZE);
@@ -251,28 +293,56 @@ public class PlanningModeRenderer {
         Minecraft minecraft = Minecraft.getInstance();
         Player player = minecraft.player;
 
-        if (player == null || !PlanningMode.isActive()) {
+        if (player == null || minecraft.options.hideGui
+                || !(tubeStack(player).getItem() instanceof PneumaticTubeBlockItem tubeItem)) {
             return;
         }
-        if (!(player.getMainHandItem().getItem() instanceof PneumaticTubeBlockItem)) {
+        PneumaticTubeBlockItem.CurveStart start = tubeItem.getSelectedStart(player.level(), player);
+        if (start == null && !PlanningMode.isActive()) {
             return;
+        }
+
+        java.util.List<Component> lines = new java.util.ArrayList<>();
+        Component title = Component.translatable(start == null ? "overpressure.planning.title" : "overpressure.routing.title");
+        boolean valid = true;
+        if (start != null) {
+            var route = getPreview(player, tubeItem, start);
+            boolean enough = player.getAbilities().instabuild || tubeStack(player).getCount() >= route.plan().tubes().size();
+            valid = route.plan().valid() && enough;
+            lines.add(Component.translatable("overpressure.routing.summary", route.plan().tubes().size(),
+                    Component.translatable("overpressure.routing.direction." + route.outgoing().getName())));
+            lines.add(Component.translatable(route.connected() ? "overpressure.routing.connected" : "overpressure.routing.free_end"));
+            lines.add(Component.translatable("overpressure.routing.controls"));
+            if (!route.plan().valid()) {
+                lines.add(Component.translatable(route.plan().errorMessage()));
+            } else if (!enough) {
+                lines.add(Component.translatable("overpressure.routing.error.items"));
+            }
+        } else {
+            lines.add(Component.translatable("overpressure.routing.select_start"));
+            lines.add(Component.translatable("overpressure.routing.aim"));
         }
 
         GuiGraphics gui = event.getGuiGraphics();
         int x = 12;
         int y = 12;
-        int width = 236;
-        int height = 92;
-
-        gui.fill(x - 4, y - 4, x + width, y + height, 0xC0101010);
-        gui.fill(x - 4, y - 4, x + width, y - 3, 0xFFD6D653);
-
-        gui.drawString(minecraft.font, Component.translatable("overpressure.planning.title"), x, y, 0xFFD6D653, false);
-        int line = y + 14;
-        String[] keys = { "1", "2", "3", "4", "5" };
-        for (String key : keys) {
-            gui.drawString(minecraft.font, Component.translatable("overpressure.planning." + key), x, line, 0xE0E0E0, false);
-            line += 13;
+        int maxWidth = Math.max(80, gui.guiWidth() - 28);
+        int width = Math.min(maxWidth, Math.max(220, minecraft.font.width(title)));
+        for (Component line : lines) {
+            width = Math.min(maxWidth, Math.max(width, minecraft.font.width(line)));
+        }
+        java.util.List<net.minecraft.util.FormattedCharSequence> wrapped = new java.util.ArrayList<>();
+        for (Component line : lines) {
+            wrapped.addAll(minecraft.font.split(line, width));
+        }
+        int color = valid ? VALID_ROUTE_COLOR : INVALID_ROUTE_COLOR;
+        gui.fill(x - 4, y - 4, x + width + 4, y + 18 + wrapped.size() * 12, 0xC0101010);
+        gui.fill(x - 4, y - 4, x + width + 4, y - 3, 0xFF000000 | color);
+        gui.drawString(minecraft.font, title, x, y, color, false);
+        int lineY = y + 16;
+        for (var line : wrapped) {
+            gui.drawString(minecraft.font, line, x, lineY, 0xE0E0E0, false);
+            lineY += 12;
         }
     }
 }
