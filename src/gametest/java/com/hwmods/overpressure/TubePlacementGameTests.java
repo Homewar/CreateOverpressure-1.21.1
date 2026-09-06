@@ -17,8 +17,43 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 @GameTestHolder(Overpressure.MODID)
 @PrefixGameTestTemplate(false)
+// Loaded only by the dedicated GameTest run, which supplies the Minecraft runtime.
 public class TubePlacementGameTests {
     private static final BlockPos START = new BlockPos(3, 5, 3);
+
+    @GameTest(template = "routing_empty")
+    public static void adjustedReachChangesPreviewAndPlacement(GameTestHelper helper) {
+        Fixture fixture = selectStart(helper, new Vec3(1, 0, 0), 64);
+        int initialCount = fixture.preview().plan().tubes().size();
+        fixture.item().setPlacementReach(fixture.player(), 10);
+        var longer = fixture.preview();
+        helper.assertTrue(longer.plan().valid() && longer.plan().tubes().size() > initialCount, "Increasing reach must extend the preview");
+        fixture.item().setPlacementReach(fixture.player(), 2);
+        helper.assertTrue(fixture.preview().plan().tubes().size() < initialCount, "Decreasing reach must shorten the preview");
+        fixture.item().setPlacementReach(fixture.player(), 10);
+        fixture.build();
+        assertPlaced(helper, longer);
+        helper.assertTrue(fixture.stack().getCount() == 64 - longer.plan().tubes().size(), "Placement must use the adjusted preview length");
+        helper.succeed();
+    }
+
+    @GameTest(template = "routing_empty")
+    public static void reachIsBoundedAndSurvivesFailedBuild(GameTestHelper helper) {
+        Fixture fixture = selectStart(helper, new Vec3(1, 0, 0), 1);
+        var start = fixture.item().getSelectedStart(helper.getLevel(), fixture.player());
+        fixture.item().setPlacementReach(fixture.player(), Integer.MIN_VALUE);
+        helper.assertTrue(fixture.item().getPlacementReach(fixture.player(), start) == 2, "Reach has a lower bound");
+        fixture.item().setPlacementReach(fixture.player(), Integer.MAX_VALUE);
+        helper.assertTrue(fixture.item().getPlacementReach(fixture.player(), start) == TubePlacementTargeting.MAX_DISTANCE, "Reach has an upper bound");
+        fixture.item().setPlacementReach(fixture.player(), 10);
+        fixture.build();
+        helper.assertTrue(fixture.item().getSelectedStart(helper.getLevel(), fixture.player()) != null, "Failed build keeps the anchor");
+        helper.assertTrue(fixture.item().getPlacementReach(fixture.player(), start) == 10, "Failed build keeps the selected reach");
+        fixture.player().setShiftKeyDown(true);
+        fixture.build();
+        helper.assertTrue(fixture.item().getPlacementReach(fixture.player(), start) == 6, "Cancellation resets the selected reach");
+        helper.succeed();
+    }
 
     @GameTest(template = "routing_empty")
     public static void aimSnapsToAllSixStartDirections(GameTestHelper helper) {

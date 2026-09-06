@@ -40,6 +40,10 @@ public class PlanningModeRenderer {
     private static PneumaticTubeBlockItem.CurveStart previewStart;
     private static PneumaticTubeBlockItem.PlacementPreview preview;
 
+    public static void invalidatePreview() {
+        preview = null;
+    }
+
     @SubscribeEvent
     static void onDisconnect(ClientPlayerNetworkEvent.LoggingOut event) {
         if (event.getPlayer() != null) {
@@ -311,6 +315,7 @@ public class PlanningModeRenderer {
             valid = route.plan().valid() && enough;
             lines.add(Component.translatable("overpressure.routing.summary", route.plan().tubes().size(),
                     Component.translatable("overpressure.routing.direction." + route.outgoing().getName())));
+            lines.add(Component.translatable("overpressure.routing.reach", tubeItem.getPlacementReach(player, start)));
             lines.add(Component.translatable(route.connected() ? "overpressure.routing.connected" : "overpressure.routing.free_end"));
             lines.add(Component.translatable("overpressure.routing.controls"));
             if (!route.plan().valid()) {

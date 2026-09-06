@@ -54,6 +54,8 @@ public class PneumaticTubeBlockItem extends BlockItem {
     private static final Map<UUID, CurveStart> CLIENT_CURVE_STARTS = new HashMap<>();
     private static final Map<UUID, ResourceKey<Level>> START_DIMENSIONS = new HashMap<>();
     private static final Map<UUID, ResourceKey<Level>> CLIENT_START_DIMENSIONS = new HashMap<>();
+    private static final Map<UUID, Integer> PLACEMENT_REACH = new HashMap<>();
+    private static final Map<UUID, Integer> CLIENT_PLACEMENT_REACH = new HashMap<>();
     private static final int CURVE_SAMPLES_PER_BLOCK = 12;
     private static final int MIN_CURVE_SAMPLES = 24;
     private static final int CURVATURE_CHECK_SAMPLES = 32;
@@ -859,6 +861,8 @@ public class PneumaticTubeBlockItem extends BlockItem {
         CLIENT_CURVE_STARTS.remove(playerId);
         START_DIMENSIONS.remove(playerId);
         CLIENT_START_DIMENSIONS.remove(playerId);
+        PLACEMENT_REACH.remove(playerId);
+        CLIENT_PLACEMENT_REACH.remove(playerId);
     }
 
     @SubscribeEvent
@@ -887,6 +891,9 @@ public class PneumaticTubeBlockItem extends BlockItem {
     private static void setSelectedStart(Level level, Player player, @Nullable CurveStart start) {
         Map<UUID, CurveStart> starts = level.isClientSide ? CLIENT_CURVE_STARTS : CURVE_STARTS;
         Map<UUID, ResourceKey<Level>> dimensions = level.isClientSide ? CLIENT_START_DIMENSIONS : START_DIMENSIONS;
+        if (start == null || !start.equals(starts.get(player.getUUID()))) {
+            (level.isClientSide ? CLIENT_PLACEMENT_REACH : PLACEMENT_REACH).remove(player.getUUID());
+        }
         if (start == null) {
             starts.remove(player.getUUID());
             dimensions.remove(player.getUUID());
@@ -908,9 +915,26 @@ public class PneumaticTubeBlockItem extends BlockItem {
     public record PlacementPreview(PlanResult plan, BlockPos endPos, Direction outgoing, boolean connected) {
     }
 
+    public int getPlacementReach(Player player, CurveStart start) {
+        Map<UUID, Integer> reaches = player.level().isClientSide ? CLIENT_PLACEMENT_REACH : PLACEMENT_REACH;
+        int automaticReach = (int) Math.round(Math.max(6.0, Math.min(24.0,
+                player.getEyePosition().distanceTo(Vec3.atCenterOf(getStartTubePos(start))) + 6.0)));
+        return reaches.getOrDefault(player.getUUID(), automaticReach);
+    }
+
+    public void setPlacementReach(Player player, int reach) {
+        if (getSelectedStart(player.level(), player) == null) {
+            return;
+        }
+        int clamped = Math.max(2, Math.min(TubePlacementTargeting.MAX_DISTANCE, reach));
+        (player.level().isClientSide ? CLIENT_PLACEMENT_REACH : PLACEMENT_REACH).put(player.getUUID(), clamped);
+    }
+
     private static BlockHitResult placementHit(Level level, Player player) {
         Vec3 eye = player.getEyePosition();
-        Vec3 target = eye.add(player.getLookAngle().scale(TubePlacementTargeting.MAX_DISTANCE));
+        int reach = (level.isClientSide ? CLIENT_PLACEMENT_REACH : PLACEMENT_REACH)
+                .getOrDefault(player.getUUID(), TubePlacementTargeting.MAX_DISTANCE);
+        Vec3 target = eye.add(player.getLookAngle().scale(reach));
         return level.clip(new ClipContext(eye, target, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player));
     }
 
@@ -933,13 +957,13 @@ public class PneumaticTubeBlockItem extends BlockItem {
 
         Vec3 aim;
         if (hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(start.pos())) {
-            aim = Vec3.atCenterOf(first.relative(start.direction(), 3));
+            aim = Vec3.atCenterOf(first.relative(start.direction(), getPlacementReach(player, start) - 1));
         } else if (hit.getType() == HitResult.Type.BLOCK) {
             BlockPos target = level.getBlockState(hit.getBlockPos()).canBeReplaced()
                     ? hit.getBlockPos() : hit.getBlockPos().relative(hit.getDirection());
             aim = Vec3.atCenterOf(target);
         } else {
-            double reach = Math.max(6.0, Math.min(24.0, player.getEyePosition().distanceTo(Vec3.atCenterOf(first)) + 6.0));
+            double reach = getPlacementReach(player, start);
             aim = player.getEyePosition().add(player.getLookAngle().scale(reach));
         }
         TubePlacementTargeting.FreeEnd end = TubePlacementTargeting.resolve(
@@ -1058,6 +1082,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
     public static void clearClientCurveStart(UUID playerId) {
         CLIENT_CURVE_STARTS.remove(playerId);
         CLIENT_START_DIMENSIONS.remove(playerId);
+        CLIENT_PLACEMENT_REACH.remove(playerId);
     }
 
     public boolean isCurveStartValid(Level level, CurveStart start) {

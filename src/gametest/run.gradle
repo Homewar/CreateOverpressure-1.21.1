@@ -1,0 +1,20 @@
+// Run with: gradlew -I src/gametest/run.gradle runGameTestServer
+// The test fixtures are added only to this dedicated test run, never to a normal JAR.
+if (!gradle.startParameter.taskNames.any { it.endsWith('runGameTestServer') }) {
+    throw new GradleException('This init script is only for runGameTestServer')
+}
+gradle.afterProject { project ->
+    if (project == project.rootProject) {
+        project.sourceSets.main.java.srcDir('src/gametest/java')
+        project.sourceSets.main.resources.srcDir('src/gametest/resources')
+        project.tasks.named('compileJava') {
+            destinationDirectory = project.layout.buildDirectory.dir('tube-gametest/classes')
+        }
+        project.sourceSets.main.output.classesDirs.setFrom(project.file('build/tube-gametest/classes'))
+        project.sourceSets.main.output.resourcesDir = project.file('build/tube-gametest/resources')
+        project.tasks.named('processResources') {
+            destinationDir = project.file('build/tube-gametest/resources')
+        }
+        project.neoForge.runs.gameTestServer.gameDirectory = project.file('build/tube-gametest-world')
+    }
+}

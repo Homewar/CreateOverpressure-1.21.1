@@ -86,6 +86,7 @@
   "overpressure.routing.connected": "Конец привязан к существующему входу",
   "overpressure.routing.free_end": "Свободный конец · Стрелка показывает направление выхода",
   "overpressure.routing.controls": "ПКМ — построить · Shift + ПКМ — отменить",
+  "overpressure.routing.reach": "Колёсико — ближе / дальше · Дальность: %s блоков",
   "overpressure.routing.select_start": "Нажмите ПКМ на свободном торце трубы или коннектора.",
   "overpressure.routing.aim": "Наведите прицел на блок или в воздух: предпросмотр покажет будущий участок.",
   "overpressure.routing.error.items": "Недостаточно труб в руке",
