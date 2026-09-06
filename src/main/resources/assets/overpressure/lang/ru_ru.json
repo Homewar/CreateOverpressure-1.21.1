@@ -84,7 +84,7 @@
   "overpressure.routing.built": "Участок построен: %s труб",
   "overpressure.routing.summary": "Труб: %s · Выход: %s",
   "overpressure.routing.connected": "Конец привязан к существующему входу",
-  "overpressure.routing.free_end": "Свободный конец · Стрелка показывает направление выхода",
+  "overpressure.routing.free_end": "Свободный конец",
   "overpressure.routing.controls": "ПКМ — построить · Shift + ПКМ — отменить",
   "overpressure.routing.reach": "Колёсико — ближе / дальше · Дальность: %s блоков",
   "overpressure.routing.select_start": "Нажмите ПКМ на свободном торце трубы или коннектора.",

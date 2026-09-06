@@ -36,10 +36,9 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 public class CurvaturePneumaticTubeBlock extends PneumaticTubeBlock {
     public static final MapCodec<CurvaturePneumaticTubeBlock> CODEC = simpleCodec(CurvaturePneumaticTubeBlock::new);
     private static final Set<BlockPos> DESTROYING_SECTION_BLOCKS = new HashSet<>();
-    private static final VoxelShape FULL_BLOCK_SHAPE = Block.box(0, 0, 0, 16, 16, 16);
 
     public CurvaturePneumaticTubeBlock(Properties properties) {
-        super(properties);
+        super(properties.dynamicShape());
     }
 
     @Override
@@ -88,12 +87,13 @@ public class CurvaturePneumaticTubeBlock extends PneumaticTubeBlock {
 
     @Override
     protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
-        return FULL_BLOCK_SHAPE;
+        return level.getBlockEntity(pos) instanceof CurvaturePneumaticTubeEntity tube
+                ? tube.getTubeShape() : Shapes.empty();
     }
 
     @Override
     protected VoxelShape getCollisionShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
-        return FULL_BLOCK_SHAPE;
+        return getShape(state, level, pos, context);
     }
 
     @Override

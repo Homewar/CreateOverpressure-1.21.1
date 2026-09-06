@@ -122,19 +122,6 @@ public class PlanningModeRenderer {
             buffers.endBatch(OverpressureRenderTypes.ghostTube());
         }
 
-        if (route != null) {
-            Vec3 tip = Vec3.atCenterOf(route.endPos());
-            Vec3 forward = Vec3.atLowerCornerOf(route.outgoing().getNormal());
-            Vec3 right = forward.cross(route.outgoing().getAxis() == Direction.Axis.Y ? WORLD_EAST : WORLD_UP).normalize();
-            Vec3 arrowTip = tip.add(forward.scale(1.1));
-            VertexConsumer arrowBuffer = buffers.getBuffer(OverpressureRenderTypes.ghostTube());
-            Matrix4f pose = poseStack.last().pose();
-            drawCapsule(tip, arrowTip, pose, arrowBuffer, 0xF000F0, routeColor);
-            drawCapsule(arrowTip, arrowTip.subtract(forward.scale(0.4)).add(right.scale(0.3)), pose, arrowBuffer, 0xF000F0, routeColor);
-            drawCapsule(arrowTip, arrowTip.subtract(forward.scale(0.4)).subtract(right.scale(0.3)), pose, arrowBuffer, 0xF000F0, routeColor);
-            buffers.endBatch(OverpressureRenderTypes.ghostTube());
-        }
-
         boolean hasCurveTubes = false;
         for (PneumaticTubeBlockItem.PlanTube tube : result.tubes()) {
             if (tube.curveP0() != null) {

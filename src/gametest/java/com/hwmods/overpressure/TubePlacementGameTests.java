@@ -22,6 +22,49 @@ public class TubePlacementGameTests {
     private static final BlockPos START = new BlockPos(3, 5, 3);
 
     @GameTest(template = "routing_empty")
+    public static void curveLeavesEmptyCornersAvailableForInteraction(GameTestHelper helper) {
+        BlockPos pos = helper.absolutePos(START);
+        var level = helper.getLevel();
+        level.setBlock(pos, ModBlocks.CURVATURE_PNEUMATIC_TUBE.get().defaultBlockState(), 3);
+        var state = level.getBlockState(pos);
+        var shape = state.getShape(level, pos);
+        Vec3 origin = Vec3.atLowerCornerOf(pos);
+        helper.assertTrue(shape.clip(origin.add(0.05, 2, 0.05), origin.add(0.05, -1, 0.05), pos) == null,
+                "Empty corner of a bend must not intercept interaction");
+        helper.assertTrue(shape.clip(origin.add(0.5, 2, 0.1), origin.add(0.5, -1, 0.1), pos) != null,
+                "The visible pipe must remain selectable");
+        helper.assertTrue(state.getCollisionShape(level, pos).clip(
+                origin.add(0.05, 2, 0.05), origin.add(0.05, -1, 0.05), pos) == null,
+                "Empty corner must not block movement");
+        level.setBlock(pos.above(), ModBlocks.PNEUMATIC_TUBE.get().defaultBlockState(), 3);
+        var hit = level.clip(new net.minecraft.world.level.ClipContext(
+                origin.add(0.1, 0.9, 0.5), origin.add(0.5, 2, 0.5),
+                net.minecraft.world.level.ClipContext.Block.OUTLINE,
+                net.minecraft.world.level.ClipContext.Fluid.NONE,
+                net.minecraft.world.phys.shapes.CollisionContext.empty()));
+        helper.assertTrue(hit.getBlockPos().equals(pos.above()), "A neighboring tube must be reachable through empty space");
+        helper.succeed();
+    }
+
+    @GameTest(template = "routing_empty")
+    public static void curveShapeFollowsGeometryChanges(GameTestHelper helper) {
+        BlockPos pos = helper.absolutePos(START);
+        var level = helper.getLevel();
+        level.setBlock(pos, ModBlocks.CURVATURE_PNEUMATIC_TUBE.get().defaultBlockState(), 3);
+        var tube = (CurvaturePneumaticTubeEntity) level.getBlockEntity(pos);
+        var state = level.getBlockState(pos);
+        var original = state.getCollisionShape(level, pos);
+        tube.setCurve(new Vec3(0.5, 0, 0.5), new Vec3(0.5, 0.33, 0.5),
+                new Vec3(0.5, 0.66, 0.5), new Vec3(0.5, 1, 0.5));
+        var updated = state.getCollisionShape(level, pos);
+        helper.assertTrue(updated != original, "Changing geometry must invalidate the shape cache");
+        helper.assertTrue(Math.abs(updated.bounds().minY) < 1.0E-6 && Math.abs(updated.bounds().maxY - 1) < 1.0E-6,
+                "Vertical bend must use its own geometry rather than a cached block-state shape");
+        helper.assertTrue(updated == state.getCollisionShape(level, pos), "Repeated queries must reuse the shape");
+        helper.succeed();
+    }
+
+    @GameTest(template = "routing_empty")
     public static void adjustedReachChangesPreviewAndPlacement(GameTestHelper helper) {
         Fixture fixture = selectStart(helper, new Vec3(1, 0, 0), 64);
         int initialCount = fixture.preview().plan().tubes().size();

@@ -84,7 +84,7 @@
   "overpressure.routing.built": "Section built: %s tubes",
   "overpressure.routing.summary": "Tubes: %s · Outlet: %s",
   "overpressure.routing.connected": "End snapped to an existing port",
-  "overpressure.routing.free_end": "Free end · The arrow shows the outlet direction",
+  "overpressure.routing.free_end": "Free end",
   "overpressure.routing.controls": "Right-click: build · Shift + right-click: cancel",
   "overpressure.routing.reach": "Scroll to move the end closer / farther · Reach: %s blocks",
   "overpressure.routing.select_start": "Right-click an open tube end or connector to select the start.",
