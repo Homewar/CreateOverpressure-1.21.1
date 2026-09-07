@@ -212,10 +212,10 @@ public class PlanningModeRenderer {
         Vec3 f = to.subtract(right).add(up);
         Vec3 g = to.add(right).add(up);
         Vec3 h = to.add(right).subtract(up);
-        addQuad(buffer, pose, a, b, f, e, 0.0f, 1.0f, packedLight, color);
-        addQuad(buffer, pose, b, c, g, f, 0.0f, 1.0f, packedLight, color);
-        addQuad(buffer, pose, c, d, h, g, 0.0f, 1.0f, packedLight, color);
-        addQuad(buffer, pose, d, a, e, h, 0.0f, 1.0f, packedLight, color);
+        addQuad(buffer, pose, a, b, f, e, 0.0f, 1.0f, packedLight, color, true);
+        addQuad(buffer, pose, b, c, g, f, 0.0f, 1.0f, packedLight, color, true);
+        addQuad(buffer, pose, c, d, h, g, 0.0f, 1.0f, packedLight, color, true);
+        addQuad(buffer, pose, d, a, e, h, 0.0f, 1.0f, packedLight, color, true);
     }
 
     private static Vec3 getPoint(Vec3 p0, Vec3 p1, Vec3 p2, Vec3 p3, float t) {
@@ -262,8 +262,20 @@ public class PlanningModeRenderer {
     }
 
     private static void addQuad(VertexConsumer buffer, Matrix4f pose, Vec3 a, Vec3 b, Vec3 c, Vec3 d, float u0, float u1, int packedLight, int color) {
+        addQuad(buffer, pose, a, b, c, d, u0, u1, packedLight, color, false);
+    }
+
+    private static void addQuad(VertexConsumer buffer, Matrix4f pose, Vec3 a, Vec3 b, Vec3 c, Vec3 d, float u0, float u1, int packedLight, int color, boolean lengthAlongV) {
         Vec3 normal = c.subtract(a).cross(b.subtract(a));
         normal = normal.lengthSqr() < 1.0E-6 ? new Vec3(0.0, 1.0, 0.0) : normal.normalize();
+        // core.png runs lengthwise along V; curve_tube.png runs along U.
+        if (lengthAlongV) {
+            addVertex(buffer, pose, a, 0.0f, u0, normal, packedLight, color);
+            addVertex(buffer, pose, b, 1.0f, u0, normal, packedLight, color);
+            addVertex(buffer, pose, c, 1.0f, u1, normal, packedLight, color);
+            addVertex(buffer, pose, d, 0.0f, u1, normal, packedLight, color);
+            return;
+        }
         addVertex(buffer, pose, a, u0, 0.0f, normal, packedLight, color);
         addVertex(buffer, pose, b, u0, 1.0f, normal, packedLight, color);
         addVertex(buffer, pose, c, u1, 1.0f, normal, packedLight, color);
