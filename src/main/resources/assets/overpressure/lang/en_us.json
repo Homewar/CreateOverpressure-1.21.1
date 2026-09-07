@@ -1,4 +1,5 @@
 {
+  "overpressure.creative_pump.speed": "Pump speed (RPM)",
   "itemGroup.overpressure.overpressure": "Create: Overpressure",
   "block.overpressure.pneumatic_tube": "Pneumatic Tube",
   "block.overpressure.curvature_pneumatic_tube": "Curvature Pneumatic Tube",

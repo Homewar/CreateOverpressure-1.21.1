@@ -78,8 +78,7 @@ public record CubicBezier(Vec3 p0, Vec3 p1, Vec3 p2, Vec3 p3) {
 
     public boolean satisfiesCurvatureLimits(
             int samples,
-            double minimumRadius,
-            double maximumSecondDerivative
+            double minimumRadius
     ) {
         for (int i = 0; i <= samples; i++) {
             double t = (double) i / samples;
@@ -87,7 +86,9 @@ public record CubicBezier(Vec3 p0, Vec3 p1, Vec3 p2, Vec3 p3) {
             Vec3 secondDerivative = secondDerivativeAt(t);
             double speedSquared = derivative.lengthSqr();
 
-            if (secondDerivative.length() > maximumSecondDerivative || speedSquared <= 1.0E-8) {
+            // The raw second derivative grows with curve length and is not a bend limit.
+            // Geometric curvature below measures turning per unit of physical distance.
+            if (speedSquared <= 1.0E-8) {
                 return false;
             }
 

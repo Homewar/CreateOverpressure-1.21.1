@@ -22,6 +22,65 @@ public class TubePlacementGameTests {
     private static final BlockPos START = new BlockPos(3, 5, 3);
 
     @GameTest(template = "routing_empty")
+    public static void creativePumpSpeedIsAdjustableAndSaved(GameTestHelper helper) {
+        helper.setBlock(START, ModBlocks.CREATIVE_ITEM_PUMP.get());
+        var pump = (ItemPumpBlockEntity) helper.getLevel().getBlockEntity(helper.absolutePos(START));
+        var speed = com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour.get(
+                helper.getLevel(), pump.getBlockPos(),
+                com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.ScrollValueBehaviour.TYPE);
+        helper.assertTrue(speed instanceof CreativePumpSpeedBehaviour, "Creative pump must expose speed settings");
+        int fast = pump.getMoveTime();
+        speed.setValue(64);
+        helper.assertTrue(pump.getMoveTime() > fast && pump.isRunning(), "Lower speed must slow transport without requiring a drive");
+        var tag = new net.minecraft.nbt.CompoundTag();
+        speed.write(tag, helper.getLevel().registryAccess(), false);
+        speed.setValue(256);
+        speed.read(tag, helper.getLevel().registryAccess(), false);
+        helper.assertTrue(speed.getValue() == 64, "Speed must survive saving and loading");
+        speed.read(new net.minecraft.nbt.CompoundTag(), helper.getLevel().registryAccess(), false);
+        helper.assertTrue(speed.getValue() == 256 && pump.getMoveTime() == fast, "Old pumps must retain maximum speed");
+        speed.setValue(-10);
+        helper.assertTrue(speed.getValue() == 1, "Minimum speed must be bounded");
+        speed.setValue(999);
+        helper.assertTrue(speed.getValue() == 256, "Maximum speed must be bounded");
+        helper.setBlock(START.east(3), ModBlocks.ITEM_PUMP.get());
+        var ordinary = (ItemPumpBlockEntity) helper.getLevel().getBlockEntity(helper.absolutePos(START.east(3)));
+        helper.assertTrue(!ordinary.isRunning() && ordinary.getMoveTime() == 0, "Ordinary pumps must still require rotation");
+        helper.succeed();
+    }
+
+    @GameTest(template = "routing_empty")
+    public static void bendLimitsMeasureGeometryAtDifferentLengths(GameTestHelper helper) {
+        for (double scale : new double[] { 1, 4, 12, 24 }) {
+            var curve = new com.hwmods.overpressure.math.CubicBezier(Vec3.ZERO,
+                    new Vec3(0.5523, 0, 0).scale(scale), new Vec3(1, 0, 0.4477).scale(scale),
+                    new Vec3(1, 0, 1).scale(scale));
+            helper.assertTrue(curve.satisfiesCurvatureLimits(32, 0.55),
+                    "Scaling up a gentle bend must not make it too sharp: " + scale);
+            helper.assertTrue(!curve.satisfiesTurnAngleLimit(16, 60), "A 90 degree segment still exceeds the turn limit");
+        }
+        var tight = new com.hwmods.overpressure.math.CubicBezier(Vec3.ZERO,
+                new Vec3(0.11, 0, 0), new Vec3(0.2, 0, 0.09), new Vec3(0.2, 0, 0.2));
+        helper.assertTrue(!tight.satisfiesCurvatureLimits(32, 0.55), "A genuinely tight bend must remain invalid");
+        var cusp = new com.hwmods.overpressure.math.CubicBezier(Vec3.ZERO, Vec3.ZERO, Vec3.ZERO, new Vec3(1, 0, 0));
+        helper.assertTrue(!cusp.satisfiesCurvatureLimits(32, 0.55), "A degenerate tangent must remain invalid");
+        helper.succeed();
+    }
+
+    @GameTest(template = "routing_empty")
+    public static void longGentleBendCanBeBuilt(GameTestHelper helper) {
+        Fixture fixture = selectStart(helper, new Vec3(1, 0, 1).normalize(), 64);
+        fixture.item().setPlacementReach(fixture.player(), 28);
+        var preview = fixture.preview();
+        helper.assertTrue(preview.plan().valid(), "Long gentle bend must be valid: " + describe(helper, preview));
+        helper.assertTrue(preview.plan().tubes().stream().anyMatch(tube -> tube.curveP0() != null),
+                "Regression route must contain a bend");
+        fixture.build();
+        assertPlaced(helper, preview);
+        helper.succeed();
+    }
+
+    @GameTest(template = "routing_empty")
     public static void curveLeavesEmptyCornersAvailableForInteraction(GameTestHelper helper) {
         BlockPos pos = helper.absolutePos(START);
         var level = helper.getLevel();

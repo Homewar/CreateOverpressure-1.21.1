@@ -61,7 +61,6 @@ public class PneumaticTubeBlockItem extends BlockItem {
     private static final int CURVATURE_CHECK_SAMPLES = 32;
     private static final int CURVE_SEGMENT_TURN_CHECK_SAMPLES = 16;
     private static final double MIN_CURVATURE_RADIUS = 0.55;
-    private static final double MAX_SECOND_DERIVATIVE = 36.0;
     private static final double MAX_CURVE_SEGMENT_TURN_DEGREES = 60.0;
     private final int placementHelperId;
 
@@ -598,8 +597,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
     private boolean isCurveSmoothEnough(CubicBezier curve) {
         return curve.satisfiesCurvatureLimits(
                 CURVATURE_CHECK_SAMPLES,
-                MIN_CURVATURE_RADIUS,
-                MAX_SECOND_DERIVATIVE
+                MIN_CURVATURE_RADIUS
         );
     }
 

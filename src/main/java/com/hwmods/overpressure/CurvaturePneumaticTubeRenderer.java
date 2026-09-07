@@ -171,10 +171,11 @@ public class CurvaturePneumaticTubeRenderer implements BlockEntityRenderer<Curva
             normal = normal.normalize();
         }
 
+        // Outward winding is required when back-face culling is enabled.
         addVertex(buffer, pose, a, u0, v0, normal, packedLight, packedOverlay);
-        addVertex(buffer, pose, b, u0, v1, normal, packedLight, packedOverlay);
-        addVertex(buffer, pose, c, u1, v1, normal, packedLight, packedOverlay);
         addVertex(buffer, pose, d, u1, v0, normal, packedLight, packedOverlay);
+        addVertex(buffer, pose, c, u1, v1, normal, packedLight, packedOverlay);
+        addVertex(buffer, pose, b, u0, v1, normal, packedLight, packedOverlay);
     }
 
     private void addVertex(

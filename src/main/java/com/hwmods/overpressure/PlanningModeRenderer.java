@@ -276,10 +276,11 @@ public class PlanningModeRenderer {
             addVertex(buffer, pose, d, 0.0f, u1, normal, packedLight, color);
             return;
         }
+        // Match the outward winding of the placed curve renderer.
         addVertex(buffer, pose, a, u0, 0.0f, normal, packedLight, color);
-        addVertex(buffer, pose, b, u0, 1.0f, normal, packedLight, color);
-        addVertex(buffer, pose, c, u1, 1.0f, normal, packedLight, color);
         addVertex(buffer, pose, d, u1, 0.0f, normal, packedLight, color);
+        addVertex(buffer, pose, c, u1, 1.0f, normal, packedLight, color);
+        addVertex(buffer, pose, b, u0, 1.0f, normal, packedLight, color);
     }
 
     private static void addVertex(VertexConsumer buffer, Matrix4f pose, Vec3 position, float u, float v, Vec3 normal, int packedLight, int color) {
