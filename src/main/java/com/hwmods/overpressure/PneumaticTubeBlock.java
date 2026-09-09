@@ -156,6 +156,13 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
             InteractionHand hand,
             BlockHitResult hit
     ) {
+        if (stack.getItem() instanceof net.minecraft.world.item.DyeItem dye && TubePainting.isTube(state)) {
+            if (!player.getAbilities().mayBuild || !level.mayInteract(player, pos)) return ItemInteractionResult.FAIL;
+            if (!level.isClientSide && TubePainting.paint(level, pos, player, dye.getDyeColor().getTextureDiffuseColor()) > 0) {
+                if (!player.isCreative()) stack.shrink(1);
+            }
+            return ItemInteractionResult.SUCCESS;
+        }
         ItemInteractionResult encasingResult = tryEncase(state, level, pos, stack, player, hand, hit);
         if (encasingResult != ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION) {
             return encasingResult;

@@ -23,14 +23,10 @@ public class PneumaticConnectionFilterSlot extends ValueBoxTransform {
 
     @Override
     public void rotate(LevelAccessor level, BlockPos pos, BlockState state, PoseStack poseStack) {
-        switch (PneumaticConnectionBlock.getFilterSlotFace(state)) {
-            case UP -> poseStack.mulPose(Axis.XP.rotationDegrees(90));
-            case DOWN -> poseStack.mulPose(Axis.XP.rotationDegrees(-90));
-            case SOUTH -> poseStack.mulPose(Axis.YP.rotationDegrees(180));
-            case EAST -> poseStack.mulPose(Axis.YP.rotationDegrees(90));
-            case WEST -> poseStack.mulPose(Axis.YP.rotationDegrees(-90));
-            case NORTH -> {
-            }
-        }
+        Direction face = PneumaticConnectionBlock.getFilterSlotFace(state);
+        // Match Create's ValueBoxTransform.Sided orientation, including its local face normal.
+        poseStack.mulPose(Axis.YP.rotationDegrees(net.createmod.catnip.math.AngleHelper.horizontalAngle(face) + 180));
+        if (face == Direction.UP) poseStack.mulPose(Axis.XP.rotationDegrees(90));
+        if (face == Direction.DOWN) poseStack.mulPose(Axis.XP.rotationDegrees(270));
     }
 }

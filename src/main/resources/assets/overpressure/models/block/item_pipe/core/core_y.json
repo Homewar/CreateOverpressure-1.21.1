@@ -30,7 +30,7 @@
                                                              0,
                                                              0
                                                          ],
-                                                  "texture":  "#2"
+                                                  "tintindex": 0, "texture": "#2"
                                               },
                                        "down":  {
                                                     "uv":  [
@@ -39,7 +39,7 @@
                                                                0,
                                                                16
                                                            ],
-                                                    "texture":  "#2"
+                                                    "tintindex": 0, "texture": "#2"
                                                 }
                                    }
                      }

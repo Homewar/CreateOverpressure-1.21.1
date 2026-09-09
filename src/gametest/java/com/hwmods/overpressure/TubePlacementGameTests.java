@@ -22,6 +22,78 @@ public class TubePlacementGameTests {
     private static final BlockPos START = new BlockPos(3, 5, 3);
 
     @GameTest(template = "routing_empty")
+    public static void curveTrimOnlyAppearsAtExposedOrNodeEnds(GameTestHelper helper) {
+        helper.setBlock(START, ModBlocks.CURVATURE_PNEUMATIC_TUBE.get());
+        var level = helper.getLevel();
+        var curve = (CurvaturePneumaticTubeEntity) level.getBlockEntity(helper.absolutePos(START));
+        helper.assertTrue(curve.needsEndTrim(true) && curve.needsEndTrim(false), "Both open ends need trim");
+        helper.setBlock(START.north(), ModBlocks.ITEM_PUMP.get());
+        helper.assertTrue(curve.needsEndTrim(true), "Direct node connection needs trim");
+        helper.setBlock(START.east(), ModBlocks.PNEUMATIC_TUBE.get().defaultBlockState().setValue(PneumaticTubeBlock.WEST, true));
+        helper.assertTrue(!curve.needsEndTrim(false), "A straight continuation already supplies trim");
+        helper.setBlock(START.east(), ModBlocks.CURVATURE_PNEUMATIC_TUBE.get());
+        var continuation = (CurvaturePneumaticTubeEntity) level.getBlockEntity(helper.absolutePos(START.east()));
+        continuation.setCurve(new Vec3(0, 0.5, 0.5), new Vec3(0.3, 0.5, 0.5),
+                new Vec3(0.7, 0.5, 0.5), new Vec3(1, 0.5, 0.5));
+        helper.assertTrue(!curve.needsEndTrim(false) && !continuation.needsEndTrim(true), "Internal curve joins must have no trim");
+        helper.setBlock(START.east(), Blocks.AIR);
+        helper.assertTrue(curve.needsEndTrim(false), "Removing the continuation must restore trim");
+        helper.succeed();
+    }
+
+    @GameTest(template = "routing_empty")
+    public static void paintingStopsAt32TubesAndCostsOneDye(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var state = ModBlocks.PNEUMATIC_TUBE.get().defaultBlockState()
+                .setValue(PneumaticTubeBlock.EAST, true).setValue(PneumaticTubeBlock.WEST, true);
+        for (int i = 0; i < 34; i++) helper.setBlock(START.east(i), state);
+        Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+        player.getAbilities().mayBuild = true;
+        var dye = new ItemStack(net.minecraft.world.item.Items.RED_DYE, 3);
+        BlockPos pos = helper.absolutePos(START);
+        ModBlocks.PNEUMATIC_TUBE.get().useItemOn(dye, level.getBlockState(pos), level, pos, player,
+                InteractionHand.MAIN_HAND, new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false));
+        int red = net.minecraft.world.item.DyeColor.RED.getTextureDiffuseColor() & 0xFFFFFF;
+        for (int i = 0; i < 34; i++) {
+            var tube = (PneumaticTubeBlockEntity) level.getBlockEntity(pos.east(i));
+            helper.assertTrue(tube.getTubeColor() == (i < 32 ? red : 0xFFFFFF), "Paint must stop at 32 tubes: " + i);
+        }
+        helper.assertTrue(dye.getCount() == 2, "A whole section costs one dye");
+        ModBlocks.PNEUMATIC_TUBE.get().useItemOn(dye, level.getBlockState(pos), level, pos, player,
+                InteractionHand.MAIN_HAND, new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false));
+        helper.assertTrue(dye.getCount() == 2, "Painting an unchanged section costs nothing");
+        helper.succeed();
+    }
+
+    @GameTest(template = "routing_empty")
+    public static void paintingCrossesCurvesButStopsAtNodesAndPersists(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var state = ModBlocks.PNEUMATIC_TUBE.get().defaultBlockState()
+                .setValue(PneumaticTubeBlock.EAST, true).setValue(PneumaticTubeBlock.WEST, true);
+        helper.setBlock(START, state);
+        helper.setBlock(START.east(), ModBlocks.CURVATURE_PNEUMATIC_TUBE.get().defaultBlockState()
+                .setValue(PneumaticTubeBlock.EAST, true).setValue(PneumaticTubeBlock.WEST, true));
+        helper.setBlock(START.east(2), ModBlocks.ITEM_PUMP.get().defaultBlockState().setValue(ItemPumpBlock.FACING, Direction.EAST));
+        helper.setBlock(START.east(3), state);
+        helper.setBlock(START.south(), state);
+        Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+        player.getAbilities().mayBuild = true;
+        BlockPos pos = helper.absolutePos(START);
+        helper.assertTrue(TubePainting.paint(level, pos, player, 0xFF0000) == 2, "Paint must cross the curve and stop at the pump");
+        helper.assertTrue(((PneumaticTubeBlockEntity) level.getBlockEntity(pos.east(3))).getTubeColor() == 0xFFFFFF,
+                "Tube beyond the pump must keep its color");
+        helper.assertTrue(((PneumaticTubeBlockEntity) level.getBlockEntity(pos.south())).getTubeColor() == 0xFFFFFF,
+                "Touching unconnected tubes must keep their color");
+        var curve = (PneumaticTubeBlockEntity) level.getBlockEntity(pos.east());
+        var tag = new net.minecraft.nbt.CompoundTag();
+        curve.write(tag, level.registryAccess(), false);
+        curve.setTubeColor(0xFFFFFF);
+        curve.read(tag, level.registryAccess(), false);
+        helper.assertTrue(curve.getTubeColor() == 0xFF0000, "Curve color must survive saving and loading");
+        helper.succeed();
+    }
+
+    @GameTest(template = "routing_empty")
     public static void creativePumpSpeedIsAdjustableAndSaved(GameTestHelper helper) {
         helper.setBlock(START, ModBlocks.CREATIVE_ITEM_PUMP.get());
         var pump = (ItemPumpBlockEntity) helper.getLevel().getBlockEntity(helper.absolutePos(START));

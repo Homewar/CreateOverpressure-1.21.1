@@ -38,7 +38,7 @@
                                                                 5,
                                                                 10
                                                             ],
-                                                     "texture":  "#4"
+                                                     "texture": "#4"
                                                  },
                                        "east":  {
                                                     "uv":  [
@@ -48,7 +48,7 @@
                                                                4
                                                            ],
                                                     "rotation":  270,
-                                                    "texture":  "#4"
+                                                    "texture": "#4"
                                                 },
                                        "south":  {
                                                      "uv":  [
@@ -57,7 +57,7 @@
                                                                 5,
                                                                 10
                                                             ],
-                                                     "texture":  "#4",
+                                                     "texture": "#4",
                                                      "cullface":  "south"
                                                  },
                                        "west":  {
@@ -68,7 +68,7 @@
                                                                2
                                                            ],
                                                     "rotation":  270,
-                                                    "texture":  "#4"
+                                                    "texture": "#4"
                                                 },
                                        "up":  {
                                                   "uv":  [
@@ -78,7 +78,7 @@
                                                              2
                                                          ],
                                                   "rotation":  180,
-                                                  "texture":  "#4"
+                                                  "texture": "#4"
                                               },
                                        "down":  {
                                                     "uv":  [
@@ -88,7 +88,7 @@
                                                                0
                                                            ],
                                                     "rotation":  180,
-                                                    "texture":  "#4"
+                                                    "texture": "#4"
                                                 }
                                    },
                          "name":  "rim_south"

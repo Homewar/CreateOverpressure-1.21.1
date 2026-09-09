@@ -136,6 +136,27 @@ public class CurvaturePneumaticTubeEntity extends PneumaticTubeBlockEntity {
         return p0;
     }
 
+    public boolean needsEndTrim(boolean start) {
+        if (level == null) return false;
+        Vec3 endpoint = Vec3.atLowerCornerOf(worldPosition).add(start ? p0 : p3);
+        // Logical path cells can be displaced from the rendered curve. Compare actual joins.
+        for (Direction direction : Direction.values()) {
+            if (level.getBlockEntity(worldPosition.relative(direction)) instanceof CurvaturePneumaticTubeEntity next) {
+                Vec3 origin = Vec3.atLowerCornerOf(next.getBlockPos());
+                if (endpoint.distanceTo(origin.add(next.getP0())) < 1.0E-4
+                        || endpoint.distanceTo(origin.add(next.getP3())) < 1.0E-4) return false;
+            }
+        }
+        Vec3 outward = getTangent(start ? 0 : 1).scale(start ? -1 : 1);
+        BlockPos beyond = BlockPos.containing(endpoint.add(outward.scale(0.05)));
+        BlockState neighbor = level.getBlockState(beyond);
+        if (neighbor.is(ModBlocks.PNEUMATIC_TUBE.get()) || neighbor.getBlock() instanceof EncasedPneumaticTubeBlock) {
+            Direction intoTube = Direction.getNearest(outward.x, outward.y, outward.z).getOpposite();
+            if (neighbor.getValue(PneumaticTubeBlock.getConnectionProperty(intoTube))) return false;
+        }
+        return true;
+    }
+
     public Vec3 getP1() {
         return p1;
     }

@@ -30,16 +30,27 @@ public class OverpressureClient {
     );
     public OverpressureClient(IEventBus modBus, ModContainer container) {
         ItemPumpRenderer.init();
+        CurvaturePneumaticTubeRenderer.init();
         modBus.addListener(OverpressureClient::onClientSetup);
         modBus.addListener(OverpressureClient::registerRenderers);
         modBus.addListener(OverpressureClient::registerAdditionalModels);
         modBus.addListener(OverpressureClient::modifyBakedModels);
         modBus.addListener(OverpressureClient::registerParticleProviders);
+        modBus.addListener(OverpressureClient::registerTubeColors);
 
         // Allows NeoForge to create a config screen for this mod's configs.
         // The config screen is accessed by going to the Mods screen > clicking on your mod > clicking on config.
         // Do not forget to add translations for your config options to the en_us.json file.
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
+    }
+
+    static void registerTubeColors(net.neoforged.neoforge.client.event.RegisterColorHandlersEvent.Block event) {
+        event.register((state, level, pos, tint) -> level != null && pos != null
+                        && level.getBlockEntity(pos) instanceof PneumaticTubeBlockEntity tube
+                        ? 0xFF000000 | tube.getTubeColor() : -1,
+                ModBlocks.PNEUMATIC_TUBE.get(), ModBlocks.CURVATURE_PNEUMATIC_TUBE.get(),
+                ModBlocks.ANDESITE_ENCASED_PNEUMATIC_TUBE.get(), ModBlocks.BRASS_ENCASED_PNEUMATIC_TUBE.get(),
+                ModBlocks.COPPER_ENCASED_PNEUMATIC_TUBE.get());
     }
 
     static void onClientSetup(FMLClientSetupEvent event) {

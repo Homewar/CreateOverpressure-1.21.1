@@ -187,7 +187,8 @@ public class PneumaticConnectionBlock extends BaseEntityBlock implements IWrench
         Direction facing = state.getValue(FACING);
 
         if (facing.getAxis().isVertical()) {
-            return state.getValue(ARROW_FACING);
+            // Vertical arrow models occupy both faces on ARROW_FACING's axis.
+            return state.getValue(ARROW_FACING).getClockWise();
         }
 
         return Direction.UP;

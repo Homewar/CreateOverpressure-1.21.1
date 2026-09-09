@@ -13,74 +13,84 @@
                      {
                          "from":  [
                                       3,
-                                      14,
-                                      3
+                                      3,
+                                      0
                                   ],
                          "to":  [
                                     13,
-                                    16,
-                                    13
+                                    13,
+                                    2
                                 ],
+                         "rotation":  {
+                                          "angle":  0,
+                                          "axis":  "y",
+                                          "origin":  [
+                                                         8,
+                                                         28,
+                                                         8
+                                                     ]
+                                      },
                          "faces":  {
                                        "north":  {
                                                      "uv":  [
-                                                                10,
-                                                                3,
+                                                                0,
                                                                 5,
-                                                                4
+                                                                5,
+                                                                10
                                                             ],
                                                      "texture": "#4"
                                                  },
                                        "east":  {
                                                     "uv":  [
-                                                               10,
-                                                               2,
                                                                5,
+                                                               4,
+                                                               10,
                                                                3
                                                            ],
+                                                    "rotation":  270,
                                                     "texture": "#4"
                                                 },
                                        "south":  {
                                                      "uv":  [
-                                                                10,
-                                                                1,
+                                                                0,
                                                                 5,
-                                                                2
+                                                                5,
+                                                                10
                                                             ],
                                                      "texture": "#4"
                                                  },
                                        "west":  {
                                                     "uv":  [
                                                                10,
-                                                               0,
+                                                               2,
                                                                5,
-                                                               1
+                                                               3
                                                            ],
+                                                    "rotation":  270,
                                                     "texture": "#4"
                                                 },
                                        "up":  {
                                                   "uv":  [
-                                                             0,
                                                              5,
-                                                             5,
-                                                             10
+                                                             2,
+                                                             10,
+                                                             1
                                                          ],
-                                                  "rotation":  90,
-                                                  "texture": "#4",
-                                                  "cullface":  "up"
+                                                  "rotation":  180,
+                                                  "texture": "#4"
                                               },
                                        "down":  {
                                                     "uv":  [
+                                                               10,
                                                                0,
                                                                5,
-                                                               5,
-                                                               10
+                                                               1
                                                            ],
-                                                    "rotation":  270,
+                                                    "rotation":  180,
                                                     "texture": "#4"
                                                 }
                                    },
-                         "name":  "rim_up"
+                         "name":  "rim_north"
                      }
                  ],
     "display":  {

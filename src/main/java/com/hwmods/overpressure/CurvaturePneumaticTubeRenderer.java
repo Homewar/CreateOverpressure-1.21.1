@@ -1,11 +1,17 @@
 package com.hwmods.overpressure;
 
 import org.joml.Matrix4f;
+import org.joml.Matrix3f;
+import org.joml.Quaternionf;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 
 import net.createmod.ponder.api.level.PonderLevel;
+import dev.engine_room.flywheel.lib.model.baked.PartialModel;
+import net.createmod.catnip.render.CachedBuffers;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.client.renderer.Sheets;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
@@ -15,6 +21,11 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 public class CurvaturePneumaticTubeRenderer implements BlockEntityRenderer<CurvaturePneumaticTubeEntity> {
+    private static final PartialModel END_TRIM =
+            PartialModel.of(ResourceLocation.fromNamespaceAndPath(
+                    Overpressure.MODID, "block/item_pipe/rim/curve_end"));
+
+    public static void init() {}
     private static final int SEGMENTS = 18;
     private static final double HALF_SIZE = 0.2425;
     private static final Vec3 WORLD_UP = new Vec3(0.0, 1.0, 0.0);
@@ -76,14 +87,38 @@ public class CurvaturePneumaticTubeRenderer implements BlockEntityRenderer<Curva
             float u0 = (float) i / SEGMENTS;
             float u1 = (float) (i + 1) / SEGMENTS;
 
-            addQuad(buffer, pose, from[0], from[1], to[1], to[0], u0, 0.0f, u1, 1.0f, packedLight, packedOverlay);
-            addQuad(buffer, pose, from[1], from[2], to[2], to[1], u0, 0.0f, u1, 1.0f, packedLight, packedOverlay);
-            addQuad(buffer, pose, from[2], from[3], to[3], to[2], u0, 0.0f, u1, 1.0f, packedLight, packedOverlay);
-            addQuad(buffer, pose, from[3], from[0], to[0], to[3], u0, 0.0f, u1, 1.0f, packedLight, packedOverlay);
+            addQuad(buffer, pose, from[0], from[1], to[1], to[0], u0, 0.0f, u1, 1.0f, packedLight, packedOverlay, tube.getTubeColor());
+            addQuad(buffer, pose, from[1], from[2], to[2], to[1], u0, 0.0f, u1, 1.0f, packedLight, packedOverlay, tube.getTubeColor());
+            addQuad(buffer, pose, from[2], from[3], to[3], to[2], u0, 0.0f, u1, 1.0f, packedLight, packedOverlay, tube.getTubeColor());
+            addQuad(buffer, pose, from[3], from[0], to[0], to[3], u0, 0.0f, u1, 1.0f, packedLight, packedOverlay, tube.getTubeColor());
         }
 
+        renderEndTrim(tube, true, sections[0], poseStack, bufferSource, packedLight);
+        renderEndTrim(tube, false, sections[SEGMENTS], poseStack, bufferSource, packedLight);
         PneumaticTubeRenderer.renderMovingItem(
                 tube, partialTick, poseStack, bufferSource, packedLight, packedOverlay, itemRenderer);
+    }
+
+    private void renderEndTrim(CurvaturePneumaticTubeEntity tube, boolean start, Vec3[] section, PoseStack poseStack,
+                               MultiBufferSource buffers, int light) {
+        if (!tube.needsEndTrim(start)) return;
+        Vec3 end = start ? tube.getP0() : tube.getP3();
+        // Use the rendered square's frame, including its roll around the tube axis.
+        // The trim model extends inward along local +Z from its end face.
+        Vec3 right = section[0].subtract(section[1]).normalize().scale(start ? -1 : 1);
+        Vec3 up = section[0].subtract(section[3]).normalize();
+        Vec3 inward = right.cross(up).normalize();
+        Matrix3f orientation = new Matrix3f(
+                (float) right.x, (float) right.y, (float) right.z,
+                (float) up.x, (float) up.y, (float) up.z,
+                (float) inward.x, (float) inward.y, (float) inward.z);
+        poseStack.pushPose();
+        poseStack.translate(end.x, end.y, end.z);
+        poseStack.mulPose(new Quaternionf().setFromNormalized(orientation));
+        poseStack.translate(-0.5, -0.5, 0);
+        CachedBuffers.partial(END_TRIM, tube.getBlockState())
+                .light(light).renderInto(poseStack, buffers.getBuffer(Sheets.cutoutBlockSheet()));
+        poseStack.popPose();
     }
 
     private Vec3[][] buildSections(CurvaturePneumaticTubeEntity tube) {
@@ -161,7 +196,8 @@ public class CurvaturePneumaticTubeRenderer implements BlockEntityRenderer<Curva
             float u1,
             float v1,
             int packedLight,
-            int packedOverlay
+            int packedOverlay,
+            int color
     ) {
         Vec3 normal = c.subtract(a).cross(b.subtract(a));
 
@@ -172,10 +208,10 @@ public class CurvaturePneumaticTubeRenderer implements BlockEntityRenderer<Curva
         }
 
         // Outward winding is required when back-face culling is enabled.
-        addVertex(buffer, pose, a, u0, v0, normal, packedLight, packedOverlay);
-        addVertex(buffer, pose, d, u1, v0, normal, packedLight, packedOverlay);
-        addVertex(buffer, pose, c, u1, v1, normal, packedLight, packedOverlay);
-        addVertex(buffer, pose, b, u0, v1, normal, packedLight, packedOverlay);
+        addVertex(buffer, pose, a, u0, v0, normal, packedLight, packedOverlay, color);
+        addVertex(buffer, pose, d, u1, v0, normal, packedLight, packedOverlay, color);
+        addVertex(buffer, pose, c, u1, v1, normal, packedLight, packedOverlay, color);
+        addVertex(buffer, pose, b, u0, v1, normal, packedLight, packedOverlay, color);
     }
 
     private void addVertex(
@@ -186,10 +222,11 @@ public class CurvaturePneumaticTubeRenderer implements BlockEntityRenderer<Curva
             float v,
             Vec3 normal,
             int packedLight,
-            int packedOverlay
+            int packedOverlay,
+            int color
     ) {
         buffer.addVertex(pose, (float) position.x, (float) position.y, (float) position.z)
-                .setColor(255, 255, 255, 255)
+                .setColor((color >> 16) & 255, (color >> 8) & 255, color & 255, 255)
                 .setUv(u, v)
                 .setOverlay(packedOverlay)
                 .setLight(packedLight)
