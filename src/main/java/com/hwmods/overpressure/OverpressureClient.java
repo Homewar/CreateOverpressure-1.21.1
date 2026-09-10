@@ -127,7 +127,8 @@ public class OverpressureClient {
 
     private static boolean isPneumaticTubeModel(ModelResourceLocation location) {
         return location.id().getNamespace().equals(Overpressure.MODID)
-                && location.id().getPath().equals("pneumatic_tube");
+                && (location.id().getPath().equals("pneumatic_tube")
+                || location.id().getPath().endsWith("_encased_pneumatic_tube"));
     }
 
     private static boolean isCapsulePortModel(ModelResourceLocation location) {

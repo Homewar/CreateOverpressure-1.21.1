@@ -87,10 +87,10 @@ public class CurvaturePneumaticTubeRenderer implements BlockEntityRenderer<Curva
             float u0 = (float) i / SEGMENTS;
             float u1 = (float) (i + 1) / SEGMENTS;
 
-            addQuad(buffer, pose, from[0], from[1], to[1], to[0], u0, 0.0f, u1, 1.0f, packedLight, packedOverlay, tube.getTubeColor());
-            addQuad(buffer, pose, from[1], from[2], to[2], to[1], u0, 0.0f, u1, 1.0f, packedLight, packedOverlay, tube.getTubeColor());
-            addQuad(buffer, pose, from[2], from[3], to[3], to[2], u0, 0.0f, u1, 1.0f, packedLight, packedOverlay, tube.getTubeColor());
-            addQuad(buffer, pose, from[3], from[0], to[0], to[3], u0, 0.0f, u1, 1.0f, packedLight, packedOverlay, tube.getTubeColor());
+            addQuad(buffer, pose, from[0], from[1], to[1], to[0], u0, 0.0f, u1, 1.0f, (tube.isTubeGlowing() ? 0xF000F0 : packedLight), packedOverlay, tube.getTubeColor());
+            addQuad(buffer, pose, from[1], from[2], to[2], to[1], u0, 0.0f, u1, 1.0f, (tube.isTubeGlowing() ? 0xF000F0 : packedLight), packedOverlay, tube.getTubeColor());
+            addQuad(buffer, pose, from[2], from[3], to[3], to[2], u0, 0.0f, u1, 1.0f, (tube.isTubeGlowing() ? 0xF000F0 : packedLight), packedOverlay, tube.getTubeColor());
+            addQuad(buffer, pose, from[3], from[0], to[0], to[3], u0, 0.0f, u1, 1.0f, (tube.isTubeGlowing() ? 0xF000F0 : packedLight), packedOverlay, tube.getTubeColor());
         }
 
         renderEndTrim(tube, true, sections[0], poseStack, bufferSource, packedLight);

@@ -21,6 +21,9 @@ import net.neoforged.neoforge.client.model.data.ModelProperty;
 
 public class PneumaticTubeBracketedModel extends BakedModelWrapper<BakedModel> {
     private static final ModelProperty<BakedModel> BRACKET_PROPERTY = new ModelProperty<>();
+    private static final ModelProperty<Boolean> GLOWING = new ModelProperty<>();
+    private final java.util.Map<BakedQuad, BakedQuad> glowingQuads =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
 
     public PneumaticTubeBracketedModel(BakedModel originalModel) {
         super(originalModel);
@@ -31,15 +34,15 @@ public class PneumaticTubeBracketedModel extends BakedModelWrapper<BakedModel> {
         BracketedBlockEntityBehaviour behaviour =
                 BlockEntityBehaviour.get(level, pos, BracketedBlockEntityBehaviour.TYPE);
 
-        if (behaviour == null || behaviour.getBracket() == null) {
-            return blockEntityData;
-        }
+        var builder = blockEntityData.derive().with(GLOWING,
+                level.getBlockEntity(pos) instanceof PneumaticTubeBlockEntity tube && tube.isTubeGlowing());
+        if (behaviour == null || behaviour.getBracket() == null) return builder.build();
 
         BakedModel bracketModel = Minecraft.getInstance()
                 .getBlockRenderer()
                 .getBlockModel(behaviour.getBracket());
 
-        return ModelData.builder()
+        return builder
                 .with(BRACKET_PROPERTY, bracketModel)
                 .build();
     }
@@ -53,6 +56,16 @@ public class PneumaticTubeBracketedModel extends BakedModelWrapper<BakedModel> {
             RenderType renderType
     ) {
         List<BakedQuad> quads = super.getQuads(state, side, random, data, renderType);
+        if (Boolean.TRUE.equals(data.get(GLOWING))) {
+            quads = quads.stream().map(quad -> quad.isTinted()
+                    ? glowingQuads.computeIfAbsent(quad, original -> {
+                        int[] vertices = original.getVertices().clone();
+                        int stride = vertices.length / 4;
+                        for (int vertex = 0; vertex < 4; vertex++) vertices[vertex * stride + 6] = 0xF000F0;
+                        return new BakedQuad(vertices, original.getTintIndex(), original.getDirection(),
+                                original.getSprite(), false, false);
+                    }) : quad).toList();
+        }
 
         if (!data.has(BRACKET_PROPERTY)) {
             return quads;

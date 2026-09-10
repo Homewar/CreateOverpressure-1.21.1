@@ -22,6 +22,205 @@ public class TubePlacementGameTests {
     private static final BlockPos START = new BlockPos(3, 5, 3);
 
     @GameTest(template = "routing_empty")
+    public static void shiftPlacementUsesVisibleCurveSurface(GameTestHelper helper) {
+        helper.setBlock(START, ModBlocks.CURVATURE_PNEUMATIC_TUBE.get());
+        var level = helper.getLevel();
+        BlockPos owner = helper.absolutePos(START);
+        var curve = (CurvaturePneumaticTubeEntity) level.getBlockEntity(owner);
+        curve.setCurve(new Vec3(20, 0.5, 8.5), new Vec3(20.33, 0.5, 8.5),
+                new Vec3(20.66, 0.5, 8.5), new Vec3(21, 0.5, 8.5));
+        var player = new net.neoforged.neoforge.common.util.FakePlayer(level,
+                new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "CurvePlaceTest"));
+        player.gameMode.changeGameModeForPlayer(GameType.SURVIVAL);
+        player.connection = new net.minecraft.server.network.ServerGamePacketListenerImpl(level.getServer(),
+                new net.minecraft.network.Connection(net.minecraft.network.protocol.PacketFlow.SERVERBOUND), player,
+                net.minecraft.server.network.CommonListenerCookie.createInitial(player.getGameProfile(), false)) {
+            @Override
+            public void send(net.minecraft.network.protocol.Packet<?> packet) {}
+        };
+        player.setShiftKeyDown(true);
+        Vec3 eye = Vec3.atLowerCornerOf(owner).add(20.5, 0.5, 5);
+        player.setPos(eye.x, eye.y - player.getEyeHeight(), eye.z);
+        player.setYRot(0);
+        player.setXRot(0);
+        var hit = level.clip(new net.minecraft.world.level.ClipContext(eye, eye.add(0, 0, 5),
+                net.minecraft.world.level.ClipContext.Block.OUTLINE, net.minecraft.world.level.ClipContext.Fluid.NONE, player));
+        var stack = new ItemStack(Blocks.STONE, 3);
+        player.setItemInHand(InteractionHand.MAIN_HAND, stack);
+        BlockPos target = owner.offset(20, 0, 7);
+        var context = new net.minecraft.world.item.context.BlockPlaceContext(new UseOnContext(player, InteractionHand.MAIN_HAND, hit));
+        helper.assertTrue(context.getClickedPos().equals(target), "Placement context must target the visible surface");
+        player.connection.handleUseItemOn(new net.minecraft.network.protocol.game.ServerboundUseItemOnPacket(InteractionHand.MAIN_HAND, hit, 1));
+        helper.assertTrue(level.getBlockState(target).is(Blocks.STONE), "Server must place beside the visible curve");
+        helper.assertTrue(level.getBlockState(owner.north()).isAir(), "No block may appear beside the hidden owner");
+        helper.assertTrue(level.getBlockEntity(owner) == curve && stack.getCount() == 2, "Placement must preserve the curve and consume one block");
+        player.connection.handleUseItemOn(new net.minecraft.network.protocol.game.ServerboundUseItemOnPacket(InteractionHand.MAIN_HAND, hit, 2));
+        helper.assertTrue(stack.getCount() == 2, "An obstructed placement must consume nothing");
+        helper.runAfterDelay(5, () -> {
+            helper.assertTrue(level.getBlockState(target).is(Blocks.STONE), "Placed block must persist after ticks");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(template = "routing_empty")
+    public static void displacedCurveAcceptsDyeAndGlowPackets(GameTestHelper helper) {
+        helper.setBlock(START, ModBlocks.CURVATURE_PNEUMATIC_TUBE.get());
+        var level = helper.getLevel();
+        BlockPos owner = helper.absolutePos(START);
+        var curve = (CurvaturePneumaticTubeEntity) level.getBlockEntity(owner);
+        curve.setCurve(new Vec3(20, 0.5, 8.5), new Vec3(20.33, 0.5, 8.5),
+                new Vec3(20.66, 0.5, 8.5), new Vec3(21, 0.5, 8.5));
+        var player = new net.neoforged.neoforge.common.util.FakePlayer(level,
+                new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "CurveInkTest"));
+        player.gameMode.changeGameModeForPlayer(GameType.SURVIVAL);
+        // FakePlayer's default listener ignores incoming packets. Exercise the real handler,
+        // suppressing only outbound traffic because this test has no connected client.
+        player.connection = new net.minecraft.server.network.ServerGamePacketListenerImpl(level.getServer(),
+                new net.minecraft.network.Connection(net.minecraft.network.protocol.PacketFlow.SERVERBOUND), player,
+                net.minecraft.server.network.CommonListenerCookie.createInitial(player.getGameProfile(), false)) {
+            @Override
+            public void send(net.minecraft.network.protocol.Packet<?> packet) {}
+        };
+        Vec3 eye = Vec3.atLowerCornerOf(owner).add(20.5, 0.5, 5);
+        player.setPos(eye.x, eye.y - player.getEyeHeight(), eye.z);
+        player.setYRot(0);
+        player.setXRot(0);
+        var hit = level.clip(new net.minecraft.world.level.ClipContext(eye, eye.add(0, 0, 5),
+                net.minecraft.world.level.ClipContext.Block.OUTLINE, net.minecraft.world.level.ClipContext.Fluid.NONE, player));
+        var dye = new ItemStack(net.minecraft.world.item.Items.RED_DYE, 3);
+        player.setItemInHand(InteractionHand.MAIN_HAND, dye);
+        player.connection.handleUseItemOn(new net.minecraft.network.protocol.game.ServerboundUseItemOnPacket(InteractionHand.MAIN_HAND, hit, 1));
+        helper.assertTrue(curve.getTubeColor() == (net.minecraft.world.item.DyeColor.RED.getTextureDiffuseColor() & 0xFFFFFF)
+                && dye.getCount() == 2, "Server must accept dye on the distant owner's visible surface");
+        var ink = new ItemStack(net.minecraft.world.item.Items.GLOW_INK_SAC, 3);
+        player.setItemInHand(InteractionHand.OFF_HAND, ink);
+        BlockPos wall = owner.offset(20, 0, 7);
+        level.setBlock(wall, Blocks.STONE.defaultBlockState(), 3);
+        player.connection.handleUseItemOn(new net.minecraft.network.protocol.game.ServerboundUseItemOnPacket(InteractionHand.OFF_HAND, hit, 2));
+        helper.assertTrue(!curve.isTubeGlowing() && ink.getCount() == 3, "A wall must prevent applying glow");
+        level.setBlock(wall, Blocks.AIR.defaultBlockState(), 3);
+        var spoof = new BlockHitResult(hit.getLocation().add(10, 0, 0), hit.getDirection(), owner, false);
+        player.connection.handleUseItemOn(new net.minecraft.network.protocol.game.ServerboundUseItemOnPacket(InteractionHand.OFF_HAND, spoof, 3));
+        helper.assertTrue(!curve.isTubeGlowing() && ink.getCount() == 3, "Invalid hit coordinates must be rejected");
+        player.connection.handleUseItemOn(new net.minecraft.network.protocol.game.ServerboundUseItemOnPacket(InteractionHand.OFF_HAND, hit, 4));
+        helper.assertTrue(curve.isTubeGlowing() && ink.getCount() == 2, "Server must accept glow from the off hand");
+        helper.succeed();
+    }
+
+    @GameTest(template = "routing_empty")
+    public static void displacedCurveCanBeTargetedAndBrokenWithinReach(GameTestHelper helper) {
+        helper.setBlock(START, ModBlocks.CURVATURE_PNEUMATIC_TUBE.get());
+        var level = helper.getLevel();
+        BlockPos owner = helper.absolutePos(START);
+        var curve = (CurvaturePneumaticTubeEntity) level.getBlockEntity(owner);
+        curve.setCurve(new Vec3(20, 0.5, 8.5), new Vec3(20.33, 0.5, 8.5),
+                new Vec3(20.66, 0.5, 8.5), new Vec3(21, 0.5, 8.5));
+        var player = new net.neoforged.neoforge.common.util.FakePlayer(level,
+                new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "CurveTest"));
+        player.gameMode.changeGameModeForPlayer(GameType.CREATIVE);
+        Vec3 eye = Vec3.atLowerCornerOf(owner).add(20.5, 0.5, 5);
+        player.setPos(eye.x, eye.y - player.getEyeHeight(), eye.z);
+        player.setYRot(0);
+        player.setXRot(0);
+        var context = new net.minecraft.world.level.ClipContext(eye, eye.add(0, 0, 5),
+                net.minecraft.world.level.ClipContext.Block.OUTLINE, net.minecraft.world.level.ClipContext.Fluid.NONE, player);
+        var hit = level.clip(context);
+        helper.assertTrue(hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK && hit.getBlockPos().equals(owner),
+                "Visible curve must select its owner even outside the owner's cell");
+        helper.assertTrue(player.canInteractWithBlock(owner, 0), "Nearby visible curve must be in interaction reach");
+        BlockPos obstruction = owner.offset(20, 0, 7);
+        level.setBlock(obstruction, Blocks.STONE.defaultBlockState(), 3);
+        helper.assertTrue(level.clip(context).getBlockPos().equals(obstruction), "A closer solid block must win selection");
+        helper.assertTrue(!player.canInteractWithBlock(owner, 0), "Distant owners must not allow interaction through walls");
+        level.setBlock(obstruction, Blocks.AIR.defaultBlockState(), 3);
+        player.setPos(eye.x, eye.y - player.getEyeHeight(), eye.z - 10);
+        helper.assertTrue(!player.canInteractWithBlock(owner, 0), "Visible geometry must still obey normal reach");
+        player.setPos(eye.x, eye.y - player.getEyeHeight(), eye.z);
+        player.gameMode.handleBlockBreakAction(owner,
+                net.minecraft.network.protocol.game.ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK,
+                hit.getDirection(), level.getMaxBuildHeight(), 0);
+        helper.assertTrue(level.getBlockState(owner).isAir(), "Server must accept breaking the nearby visible curve");
+        helper.succeed();
+    }
+
+    @GameTest(template = "routing_empty")
+    public static void builtLongCurveHasContinuousCollision(GameTestHelper helper) {
+        Fixture fixture = selectStart(helper, new Vec3(1, 0, 1).normalize(), 64);
+        fixture.item().setPlacementReach(fixture.player(), 28);
+        var preview = fixture.preview();
+        helper.assertTrue(preview.plan().valid(), "Long curve must be buildable");
+        fixture.build();
+        int checked = 0;
+        for (var planned : preview.plan().tubes()) {
+            if (!(helper.getLevel().getBlockEntity(planned.pos()) instanceof CurvaturePneumaticTubeEntity curve)) continue;
+            for (float t : new float[] { 0, 0.25f, 0.5f, 0.75f, 1 }) {
+                Vec3 point = Vec3.atLowerCornerOf(planned.pos()).add(curve.getPoint(t));
+                var probe = new net.minecraft.world.phys.AABB(point.subtract(0.01, 0.01, 0.01), point.add(0.01, 0.01, 0.01));
+                helper.assertTrue(!helper.getLevel().noCollision(probe), "Collision gap on long curve at " + planned.pos() + ", t=" + t);
+                checked++;
+            }
+        }
+        helper.assertTrue(checked > 60, "Regression must cover a long curve including its joins");
+        helper.succeed();
+    }
+
+    @GameTest(template = "routing_empty")
+    public static void displacedCurveCollidesOutsideItsOwnerCell(GameTestHelper helper) {
+        helper.setBlock(START, ModBlocks.CURVATURE_PNEUMATIC_TUBE.get());
+        var level = helper.getLevel();
+        BlockPos pos = helper.absolutePos(START);
+        var curve = (CurvaturePneumaticTubeEntity) level.getBlockEntity(pos);
+        curve.setCurve(new Vec3(20, 0.5, 8.5), new Vec3(20.33, 0.5, 8.5),
+                new Vec3(20.66, 0.5, 8.5), new Vec3(21, 0.5, 8.5));
+        Vec3 center = Vec3.atLowerCornerOf(pos).add(curve.getPoint(0.5f));
+        var box = new net.minecraft.world.phys.AABB(center.subtract(0.1, 0.1, 0.1), center.add(0.1, 0.1, 0.1));
+        helper.assertTrue(!level.noCollision(box), "Visible curve must collide even 20 blocks from its owner");
+        helper.assertTrue(level.noCollision(box.move(0, 0, 1)), "Empty space beside the curve must stay clear");
+        curve.onChunkUnloaded();
+        helper.assertTrue(level.noCollision(box), "Unloaded curves must leave no phantom collisions");
+        curve.onLoad();
+        helper.assertTrue(!level.noCollision(box), "Reloaded curves must restore their collisions");
+        curve.setCurve(new Vec3(22, 0.5, 8.5), new Vec3(22.33, 0.5, 8.5),
+                new Vec3(22.66, 0.5, 8.5), new Vec3(23, 0.5, 8.5));
+        helper.assertTrue(level.noCollision(box) && !level.noCollision(box.move(2, 0, 0)), "Geometry changes must update collision lookup");
+        helper.setBlock(START, Blocks.AIR);
+        helper.assertTrue(level.noCollision(box.move(2, 0, 0)), "Removed curves must leave no phantom collisions");
+        helper.succeed();
+    }
+
+    @GameTest(template = "routing_empty")
+    public static void glowInkLightsTubeAppearanceAndPersists(GameTestHelper helper) {
+        var level = helper.getLevel();
+        for (int i = 0; i < 34; i++) {
+            var block = i == 1 ? ModBlocks.CURVATURE_PNEUMATIC_TUBE.get() : ModBlocks.PNEUMATIC_TUBE.get();
+            helper.setBlock(START.east(i), block.defaultBlockState()
+                    .setValue(PneumaticTubeBlock.EAST, true).setValue(PneumaticTubeBlock.WEST, true));
+        }
+        Player player = helper.makeMockPlayer(GameType.SURVIVAL);
+        player.getAbilities().mayBuild = true;
+        var ink = new ItemStack(net.minecraft.world.item.Items.GLOW_INK_SAC, 3);
+        BlockPos pos = helper.absolutePos(START);
+        var curve = (PneumaticTubeBlockEntity) level.getBlockEntity(pos.east());
+        curve.setTubeColor(0xFF0000);
+        var hit = new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false);
+        ModBlocks.PNEUMATIC_TUBE.get().useItemOn(ink, level.getBlockState(pos), level, pos, player, InteractionHand.MAIN_HAND, hit);
+        for (int i = 0; i < 34; i++) {
+            var tube = (PneumaticTubeBlockEntity) level.getBlockEntity(pos.east(i));
+            helper.assertTrue(tube.isTubeGlowing() == (i < 32), "Glow must stop at 32 tubes: " + i);
+            helper.assertTrue(tube.getBlockState().getLightEmission(level, tube.getBlockPos()) == 0, "Pseudo glow must not emit world light");
+        }
+        helper.assertTrue(ink.getCount() == 2 && curve.getTubeColor() == 0xFF0000, "Glow costs one ink and preserves dye");
+        ModBlocks.PNEUMATIC_TUBE.get().useItemOn(ink, level.getBlockState(pos), level, pos, player, InteractionHand.MAIN_HAND, hit);
+        helper.assertTrue(ink.getCount() == 2, "An already glowing section costs nothing");
+        var tag = new net.minecraft.nbt.CompoundTag();
+        curve.write(tag, level.registryAccess(), false);
+        curve.setTubeGlowing(false);
+        curve.read(tag, level.registryAccess(), false);
+        helper.assertTrue(curve.isTubeGlowing(), "Glow must survive saving and loading");
+        helper.succeed();
+    }
+
+    @GameTest(template = "routing_empty")
     public static void curveTrimOnlyAppearsAtExposedOrNodeEnds(GameTestHelper helper) {
         helper.setBlock(START, ModBlocks.CURVATURE_PNEUMATIC_TUBE.get());
         var level = helper.getLevel();

@@ -25,6 +25,24 @@ public class CurvaturePneumaticTubeEntity extends PneumaticTubeBlockEntity {
     }
 
     @Override
+    public void onLoad() {
+        super.onLoad();
+        CurveCollisionIndex.update(this);
+    }
+
+    @Override
+    public void invalidate() {
+        CurveCollisionIndex.remove(this);
+        super.invalidate();
+    }
+
+    @Override
+    public void onChunkUnloaded() {
+        CurveCollisionIndex.remove(this);
+        super.onChunkUnloaded();
+    }
+
+    @Override
     public boolean canTravelTo(Level level, Direction direction) {
         BlockState state = getBlockState();
 
@@ -47,6 +65,7 @@ public class CurvaturePneumaticTubeEntity extends PneumaticTubeBlockEntity {
         this.p3 = p3;
         if (changed) {
             tubeShape = null;
+            CurveCollisionIndex.update(this);
         }
         setChanged();
 
@@ -190,6 +209,7 @@ public class CurvaturePneumaticTubeEntity extends PneumaticTubeBlockEntity {
         p1 = loadPoint(tag, "p1", p1);
         p2 = loadPoint(tag, "p2", p2);
         p3 = loadPoint(tag, "p3", p3);
+        CurveCollisionIndex.update(this);
         if (!previousP0.equals(p0) || !previousP1.equals(p1)
                 || !previousP2.equals(p2) || !previousP3.equals(p3)) {
             tubeShape = null;

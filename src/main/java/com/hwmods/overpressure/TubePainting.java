@@ -18,7 +18,24 @@ public final class TubePainting {
     }
 
     public static int paint(Level level, BlockPos start, Player player, int color) {
-        color &= 0xFFFFFF;
+        int rgb = color & 0xFFFFFF;
+        return apply(level, start, player, tube -> {
+            if (tube.getTubeColor() == rgb) return false;
+            tube.setTubeColor(rgb);
+            return true;
+        });
+    }
+
+    public static int glow(Level level, BlockPos start, Player player) {
+        return apply(level, start, player, tube -> {
+            if (tube.isTubeGlowing()) return false;
+            tube.setTubeGlowing(true);
+            return true;
+        });
+    }
+
+    private static int apply(Level level, BlockPos start, Player player,
+                             java.util.function.Predicate<PneumaticTubeBlockEntity> operation) {
         var queue = new ArrayDeque<BlockPos>();
         var visited = new HashSet<BlockPos>();
         queue.add(start.immutable());
@@ -31,10 +48,7 @@ public final class TubePainting {
             BlockState state = level.getBlockState(pos);
             if (!isTube(state) || !(level.getBlockEntity(pos) instanceof PneumaticTubeBlockEntity tube)) continue;
             traversed++;
-            if (tube.getTubeColor() != color) {
-                tube.setTubeColor(color);
-                changed++;
-            }
+            if (operation.test(tube)) changed++;
             for (Direction direction : Direction.values()) {
                 if (!state.getValue(PneumaticTubeBlock.getConnectionProperty(direction))) continue;
                 BlockPos next = pos.relative(direction);
