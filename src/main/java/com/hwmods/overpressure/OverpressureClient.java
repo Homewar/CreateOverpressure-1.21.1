@@ -31,6 +31,7 @@ public class OverpressureClient {
     public OverpressureClient(IEventBus modBus, ModContainer container) {
         ItemPumpRenderer.init();
         CurvaturePneumaticTubeRenderer.init();
+        com.hwmods.overpressure.tube.TubeSectionRenderer.init();
         modBus.addListener(OverpressureClient::onClientSetup);
         modBus.addListener(OverpressureClient::registerRenderers);
         modBus.addListener(OverpressureClient::registerAdditionalModels);

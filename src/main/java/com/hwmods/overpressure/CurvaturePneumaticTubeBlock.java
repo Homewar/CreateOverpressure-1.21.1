@@ -160,6 +160,7 @@ public class CurvaturePneumaticTubeBlock extends PneumaticTubeBlock {
     }
 
     private void destroySection(Level level, BlockPos origin, @Nullable Player player) {
+        if (com.hwmods.overpressure.tube.LegacyTubeMigration.isMigrating(level)) return;
         if (level.isClientSide || DESTROYING_SECTION_BLOCKS.contains(origin)) {
             return;
         }

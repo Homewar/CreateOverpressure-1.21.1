@@ -159,6 +159,13 @@ public class CapsulePortBlockEntity extends SmartBlockEntity implements Transpor
 
         Direction outputDirection = CapsulePortBlock.getOutputDirection(getBlockState());
         BlockPos firstPathPos = worldPosition.relative(outputDirection);
+        var sectionRoute = com.hwmods.overpressure.tube.SectionTransport.find(level, worldPosition, outputDirection, sealedPackage);
+        if (sectionRoute != null && level instanceof net.minecraft.server.level.ServerLevel server) {
+            if (!com.hwmods.overpressure.tube.SectionTransport.get(server).accept(server, sealedPackage, sectionRoute)) return false;
+            sealedPackage = ItemStack.EMPTY;
+            setChangedAndSync();
+            return true;
+        }
         if (!PneumaticLine.isPathNode(level, firstPathPos)) {
             return false;
         }

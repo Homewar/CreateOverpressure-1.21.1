@@ -86,7 +86,7 @@ public final class TubeTransportManager {
     }
 
     public boolean isOccupied(BlockPos owner) {
-        return occupants.containsKey(owner);
+        return occupants.containsKey(owner) || com.hwmods.overpressure.tube.SectionTransport.isOccupied(level, owner);
     }
 
     public boolean isHeadingTo(BlockPos owner, int pathOffset, BlockPos target) {
@@ -100,7 +100,7 @@ public final class TubeTransportManager {
     }
 
     public boolean canAccept(BlockPos owner, ItemStack stack, TubePath path) {
-        if (occupants.containsKey(owner) || stack.isEmpty() || path.isEmpty() || !Config.canEnterTube(stack)) {
+        if (isOccupied(owner) || stack.isEmpty() || path.isEmpty() || !Config.canEnterTube(stack)) {
             return false;
         }
         int pathIndex = path.tubePositions().indexOf(owner);
@@ -192,6 +192,12 @@ public final class TubeTransportManager {
         ItemStack stack = entry.cargo().stack();
         level.addFreshEntity(new ItemEntity(level, position.x, position.y, position.z, stack));
         sync(owner);
+    }
+
+    /** Moves persistence ownership during legacy-section migration without spawning or duplicating items. */
+    public MovingTubeItem takeForMigration(BlockPos owner) {
+        TransitEntry entry = occupants.remove(owner);
+        return entry == null ? null : entry.snapshot();
     }
 
     public boolean isOutputBranchSaturated(BlockPos firstOwner) {
@@ -363,7 +369,7 @@ public final class TubeTransportManager {
         }
 
         BlockEntity destinationEntity = level.getBlockEntity(crossedPos);
-        if (destinationEntity instanceof PneumaticTubeBlockEntity && !occupants.containsKey(crossedPos)) {
+        if (destinationEntity instanceof PneumaticTubeBlockEntity && !isOccupied(crossedPos)) {
             if (destinationEntity instanceof TransportJunction junction) {
                 BlockPos enteredFrom = path.get(Math.max(0, state.pathIndex - 1));
                 if (junction.isBranchPort(enteredFrom)) {
@@ -581,7 +587,7 @@ public final class TubeTransportManager {
             return false;
         }
         int nextOwnerIndex = nextOwnerPathIndex(entry.route().blockPath(), entry.state().pathIndex);
-        return nextOwnerIndex < 0 || !occupants.containsKey(entry.route().blockPath().get(nextOwnerIndex));
+        return nextOwnerIndex < 0 || !isOccupied(entry.route().blockPath().get(nextOwnerIndex));
     }
 
     private boolean canTravelToNextPathNode(TransitEntry entry, int currentIndex) {

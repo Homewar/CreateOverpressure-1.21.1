@@ -152,9 +152,10 @@ public class TubePlacementGameTests {
         fixture.build();
         int checked = 0;
         for (var planned : preview.plan().tubes()) {
-            if (!(helper.getLevel().getBlockEntity(planned.pos()) instanceof CurvaturePneumaticTubeEntity curve)) continue;
+            if (planned.curveP0() == null) continue;
+            var curve = new com.hwmods.overpressure.math.CubicBezier(planned.curveP0(), planned.curveP1(), planned.curveP2(), planned.curveP3());
             for (float t : new float[] { 0, 0.25f, 0.5f, 0.75f, 1 }) {
-                Vec3 point = Vec3.atLowerCornerOf(planned.pos()).add(curve.getPoint(t));
+                Vec3 point = Vec3.atLowerCornerOf(planned.pos()).add(curve.pointAt(t));
                 var probe = new net.minecraft.world.phys.AABB(point.subtract(0.01, 0.01, 0.01), point.add(0.01, 0.01, 0.01));
                 helper.assertTrue(!helper.getLevel().noCollision(probe), "Collision gap on long curve at " + planned.pos() + ", t=" + t);
                 checked++;
@@ -470,7 +471,7 @@ public class TubePlacementGameTests {
         helper.assertTrue(preview.plan().tubes().stream().anyMatch(tube -> tube.curveP0() != null), "Sideways aim must produce a curve");
         fixture.build();
         assertPlaced(helper, preview);
-        helper.assertTrue(helper.getLevel().getBlockState(preview.endPos()).getBlock() == ModBlocks.PNEUMATIC_TUBE.get(), "A curved free route needs a regular terminal tube");
+        helper.assertTrue(helper.getLevel().getBlockState(preview.endPos()).isAir(), "A curved free end must belong to the section without a terminal block");
         helper.succeed();
     }
 
@@ -550,11 +551,17 @@ public class TubePlacementGameTests {
 
     private static void assertPlaced(GameTestHelper helper, PneumaticTubeBlockItem.PlacementPreview preview) {
         for (var tube : preview.plan().tubes()) {
-            helper.assertTrue(helper.getLevel().getBlockState(tube.pos()).getBlock() == tube.state().getBlock(), "Built route must match preview at " + tube.pos());
-            if (tube.curveP0() != null) {
-                var entity = (CurvaturePneumaticTubeEntity) helper.getLevel().getBlockEntity(tube.pos());
-                helper.assertTrue(entity.getP0().equals(tube.curveP0()) && entity.getP3().equals(tube.curveP3()), "Built curve endpoints must match the preview");
+            if (tube.curveP0() == null) {
+                helper.assertTrue(helper.getLevel().getBlockState(tube.pos()).getBlock() == tube.state().getBlock(), "Built straight route must match preview");
+                continue;
             }
+            Vec3 origin = Vec3.atLowerCornerOf(tube.pos());
+            helper.assertTrue(helper.getLevel().getBlockState(tube.pos()).isAir(), "Curves must not create hidden support blocks");
+            helper.assertTrue(com.hwmods.overpressure.tube.TubeSections.get(helper.getLevel()).sections().stream()
+                    .flatMap(section -> section.spans().stream()).anyMatch(span ->
+                            span.curve().p0().distanceToSqr(origin.add(tube.curveP0())) < 1.0E-8
+                            && span.curve().p3().distanceToSqr(origin.add(tube.curveP3())) < 1.0E-8),
+                    "Stored section geometry must match the visible preview");
         }
     }
 

@@ -211,6 +211,7 @@ public class DeviderBlockEntity extends PneumaticTubeBlockEntity implements Tran
     }
 
     private boolean hasPendingMergeItem(Level level, BlockPos branchPos) {
+        if (com.hwmods.overpressure.tube.SectionTransport.hasPendingMerge(level, worldPosition, branchPos)) return true;
         BlockPos itemTubePos = branchPos;
         int dividerOffset = 1;
         if (level.getBlockEntity(branchPos) instanceof ItemPumpBlockEntity) {

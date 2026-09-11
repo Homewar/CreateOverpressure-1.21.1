@@ -18,6 +18,8 @@ public interface CurveCollisionMixin {
             CallbackInfoReturnable<Iterable<VoxelShape>> callback) {
         if ((Object) this instanceof Level level) {
             var curves = CurveCollisionIndex.collisions(level, box);
+            curves = new java.util.ArrayList<>(curves);
+            curves.addAll(com.hwmods.overpressure.tube.TubeSections.collisions(level, box));
             if (!curves.isEmpty()) {
                 callback.setReturnValue(com.google.common.collect.Iterables.concat(callback.getReturnValue(), curves));
             }

@@ -27,6 +27,11 @@ public record TubePlacementSyncPayload(
                     if (payload.start().deviderSide() != null) {
                         buffer.writeEnum(payload.start().deviderSide());
                     }
+                    buffer.writeBoolean(payload.start().sectionId() != null);
+                    if (payload.start().sectionId() != null) {
+                        buffer.writeUUID(payload.start().sectionId());
+                        buffer.writeBoolean(payload.start().sectionStart());
+                    }
                 }
             },
             buffer -> {
@@ -36,7 +41,9 @@ public record TubePlacementSyncPayload(
                     var pos = buffer.readBlockPos();
                     Direction direction = buffer.readEnum(Direction.class);
                     Direction branch = buffer.readBoolean() ? buffer.readEnum(Direction.class) : null;
-                    start = new PneumaticTubeBlockItem.CurveStart(pos, direction, branch);
+                    java.util.UUID section = buffer.readBoolean() ? buffer.readUUID() : null;
+                    boolean sectionStart = section != null && buffer.readBoolean();
+                    start = new PneumaticTubeBlockItem.CurveStart(pos, direction, branch, section, sectionStart);
                 }
                 return new TubePlacementSyncPayload(dimension, start);
             });

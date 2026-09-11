@@ -148,6 +148,11 @@ public class PneumaticTubeRenderer implements BlockEntityRenderer<PneumaticTubeB
             int packedOverlay
     ) {
         Vec3 direction = getCapsuleDirection(tube, item, step);
+        renderCapsule(direction, poseStack, bufferSource, packedLight, packedOverlay);
+    }
+
+    private static void renderCapsule(Vec3 direction, PoseStack poseStack, MultiBufferSource bufferSource,
+                                      int packedLight, int packedOverlay) {
         rotateCapsule(poseStack, direction);
         poseStack.scale(CAPSULE_SCALE, CAPSULE_SCALE, CAPSULE_SCALE);
         poseStack.translate(-0.5, -0.25, -0.5);
@@ -171,6 +176,17 @@ public class PneumaticTubeRenderer implements BlockEntityRenderer<PneumaticTubeB
                         ModelData.EMPTY,
                         null
                 );
+    }
+
+    public static void renderSectionCargo(net.minecraft.world.level.Level level, net.minecraft.world.item.ItemStack stack,
+                                           Vec3 direction, PoseStack poseStack, MultiBufferSource buffers, int light) {
+        if (isCardboard(stack)) {
+            renderCapsule(direction, poseStack, buffers, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY);
+        } else {
+            poseStack.scale(ITEM_SCALE, ITEM_SCALE, ITEM_SCALE);
+            Minecraft.getInstance().getItemRenderer().renderStatic(stack, ItemDisplayContext.FIXED, light,
+                    net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, poseStack, buffers, level, 0);
+        }
     }
 
     private static Vec3 getCapsuleDirection(

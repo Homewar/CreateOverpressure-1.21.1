@@ -57,6 +57,16 @@ public class PneumaticConnectionBlockEntity extends SmartBlockEntity implements 
 
         Direction facing = getBlockState().getValue(PneumaticConnectionBlock.FACING);
         BlockPos firstTubePos = worldPosition.relative(facing);
+        ItemStack sectionCandidate = extractItems(level, source.handler(), true);
+        var sectionRoute = com.hwmods.overpressure.tube.SectionTransport.find(level, worldPosition, facing, sectionCandidate);
+        if (sectionRoute != null && level instanceof net.minecraft.server.level.ServerLevel server) {
+            var transport = com.hwmods.overpressure.tube.SectionTransport.get(server);
+            if (sectionCandidate.isEmpty() || !transport.canAccept(server, sectionRoute)) return;
+            ItemStack extracted = extractItems(level, source.handler(), false);
+            if (!extracted.isEmpty() && !transport.accept(server, extracted, sectionRoute)) insertItem(source.handler(), extracted);
+            setChanged();
+            return;
+        }
         if (!PneumaticLine.isPathNode(level, firstTubePos)) {
             return;
         }
@@ -122,6 +132,12 @@ public class PneumaticConnectionBlockEntity extends SmartBlockEntity implements 
 
         Direction facing = getBlockState().getValue(PneumaticConnectionBlock.FACING);
         BlockPos firstTubePos = worldPosition.relative(facing);
+        var sectionRoute = com.hwmods.overpressure.tube.SectionTransport.find(level, worldPosition, facing, stack.copyWithCount(1));
+        if (sectionRoute != null && level instanceof net.minecraft.server.level.ServerLevel server) {
+            var transport = com.hwmods.overpressure.tube.SectionTransport.get(server);
+            if (!transport.canAccept(server, sectionRoute) || !simulate && !transport.accept(server, stack.copyWithCount(1), sectionRoute)) return stack;
+            ItemStack remainder = stack.copy(); remainder.shrink(1); return remainder;
+        }
         if (!PneumaticLine.isPathNode(level, firstTubePos)) {
             return stack;
         }

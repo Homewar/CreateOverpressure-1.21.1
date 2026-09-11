@@ -19,6 +19,7 @@ public class CurvaturePneumaticTubeEntity extends PneumaticTubeBlockEntity {
     private Vec3 p3 = new Vec3(1.0, 0.5, 0.5);
     private UUID sectionId = UUID.randomUUID();
     private VoxelShape tubeShape;
+    private boolean loadedLegacyData;
 
     public CurvaturePneumaticTubeEntity(BlockPos pos, BlockState blockState) {
         super(ModBlockEntities.CURVATURE_PNEUMATIC_TUBE.get(), pos, blockState);
@@ -28,6 +29,9 @@ public class CurvaturePneumaticTubeEntity extends PneumaticTubeBlockEntity {
     public void onLoad() {
         super.onLoad();
         CurveCollisionIndex.update(this);
+        if (loadedLegacyData && level instanceof net.minecraft.server.level.ServerLevel server) {
+            com.hwmods.overpressure.tube.LegacyTubeMigration.enqueue(server, worldPosition);
+        }
     }
 
     @Override
@@ -200,6 +204,7 @@ public class CurvaturePneumaticTubeEntity extends PneumaticTubeBlockEntity {
 
     @Override
     protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
+        if (!clientPacket) loadedLegacyData = true;
         Vec3 previousP0 = p0;
         Vec3 previousP1 = p1;
         Vec3 previousP2 = p2;

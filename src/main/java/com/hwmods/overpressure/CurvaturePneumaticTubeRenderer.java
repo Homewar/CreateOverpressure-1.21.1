@@ -184,7 +184,7 @@ public class CurvaturePneumaticTubeRenderer implements BlockEntityRenderer<Curva
         };
     }
 
-    private void addQuad(
+    public static void addQuad(
             VertexConsumer buffer,
             Matrix4f pose,
             Vec3 a,
@@ -214,7 +214,7 @@ public class CurvaturePneumaticTubeRenderer implements BlockEntityRenderer<Curva
         addVertex(buffer, pose, b, u0, v1, normal, packedLight, packedOverlay, color);
     }
 
-    private void addVertex(
+    private static void addVertex(
             VertexConsumer buffer,
             Matrix4f pose,
             Vec3 position,

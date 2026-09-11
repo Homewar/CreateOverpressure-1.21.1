@@ -6,6 +6,7 @@ import java.util.Optional;
 
 import javax.annotation.Nullable;
 
+import com.hwmods.overpressure.tube.TubeSections;
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.decoration.bracket.BracketBlock;
 import com.simibubi.create.content.decoration.bracket.BracketedBlockEntityBehaviour;
@@ -248,7 +249,8 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
         for (Direction direction : Direction.values()) {
             BlockState neighborState = level.getBlockState(pos.relative(direction));
             boolean canConnect = canAddConnection(state, direction)
-                    && canNeighborAcceptConnection(neighborState, direction.getOpposite());
+                    && (canNeighborAcceptConnection(neighborState, direction.getOpposite())
+                    || com.hwmods.overpressure.tube.TubeSections.connects(level, pos, direction));
             state = state.setValue(getConnectionProperty(direction), canConnect);
         }
 
@@ -276,7 +278,8 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
         }
 
         boolean canConnect = canAddConnection(state, direction)
-                && canNeighborAcceptConnection(neighborState, direction.getOpposite());
+                && (canNeighborAcceptConnection(neighborState, direction.getOpposite())
+                || com.hwmods.overpressure.tube.TubeSections.connects(level, pos, direction));
         BlockState newState = state.setValue(getConnectionProperty(direction), canConnect);
         newState = newState.setValue(HAS_CONNECTION, !getConnectedDirections(newState).isEmpty());
 
@@ -556,8 +559,9 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
         }
 
         BlockState neighborState = level.getBlockState(pos.relative(direction));
-        return neighborState.getBlock() instanceof CurvaturePneumaticTubeBlock
-                && neighborState.getValue(getConnectionProperty(direction.getOpposite()));
+        return (neighborState.getBlock() instanceof CurvaturePneumaticTubeBlock
+                && neighborState.getValue(getConnectionProperty(direction.getOpposite())))
+                || (level instanceof Level world && TubeSections.connects(world, pos, direction));
     }
 
     @Override

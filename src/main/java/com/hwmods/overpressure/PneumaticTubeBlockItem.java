@@ -249,6 +249,17 @@ public class PneumaticTubeBlockItem extends BlockItem {
             player.displayClientMessage(Component.translatable("overpressure.routing.error.items"), true);
             return false;
         }
+        var independent = com.hwmods.overpressure.tube.TubeSectionPlacement.fromPlan(plan.tubes());
+        if (independent != null) {
+            if (!com.hwmods.overpressure.tube.TubeSectionPlacement.canPlace(level, independent, player)) {
+                player.displayClientMessage(Component.translatable("overpressure.routing.error.blocked"), true);
+                return false;
+            }
+            com.hwmods.overpressure.tube.TubeSections.put(level, independent);
+            if (!player.getAbilities().instabuild) stack.shrink(independent.materialCost());
+            player.displayClientMessage(Component.translatable("overpressure.routing.built", independent.materialCost()), true);
+            return true;
+        }
         for (PlanTube tube : plan.tubes()) {
             if (!level.mayInteract(player, tube.pos())
                     || !player.mayUseItemAt(tube.pos(), Direction.UP, stack)) {
@@ -787,7 +798,11 @@ public class PneumaticTubeBlockItem extends BlockItem {
     private record PlacedTube(BlockPos pos, BlockState state, @Nullable CubicBezier bezier) {
     }
 
-    public record CurveStart(BlockPos pos, Direction direction, @Nullable Direction deviderSide) {
+    public record CurveStart(BlockPos pos, Direction direction, @Nullable Direction deviderSide,
+                             @Nullable UUID sectionId, boolean sectionStart) {
+        public CurveStart(BlockPos pos, Direction direction, @Nullable Direction deviderSide) {
+            this(pos, direction, deviderSide, null, false);
+        }
         public CurveStart(BlockPos pos, Direction direction) {
             this(pos, direction, null);
         }
@@ -937,6 +952,16 @@ public class PneumaticTubeBlockItem extends BlockItem {
     }
 
     public PlacementPreview previewPlacement(Level level, Player player, CurveStart start) {
+        var sectionHit = com.hwmods.overpressure.tube.TubeSectionInteractions.hit(player, TubePlacementTargeting.MAX_DISTANCE);
+        if (sectionHit != null && !sectionHit.section().id().equals(start.sectionId())) {
+            boolean firstEnd = sectionHit.point().distanceToSqr(sectionHit.section().port(true).position())
+                    < sectionHit.point().distanceToSqr(sectionHit.section().port(false).position());
+            var port = sectionHit.section().port(firstEnd);
+            if (sectionHit.point().distanceTo(port.position()) < 0.8) {
+                BlockPos anchor = BlockPos.containing(port.position().subtract(port.outward().scale(0.05)));
+                return new PlacementPreview(planSection(level, start, new CurveEnd(anchor, port.direction())), anchor, port.direction().getOpposite(), true);
+            }
+        }
         BlockHitResult hit = placementHit(level, player);
         BlockPos first = getStartTubePos(start);
         if (hit.getType() == HitResult.Type.BLOCK && !hit.getBlockPos().equals(start.pos())) {
@@ -973,6 +998,9 @@ public class PneumaticTubeBlockItem extends BlockItem {
     private PlanResult planFreeSection(Level level, CurveStart start, TubePlacementTargeting.FreeEnd end) {
         BlockPos first = getStartTubePos(start);
         boolean straight = !start.isDeviderOutput() && isStraight(first, end.pos());
+        if (!straight) {
+            return planSection(level, start, new CurveEnd(end.pos().relative(end.outgoing()), end.outgoing().getOpposite()));
+        }
         // Leave a regular tube at the free end so it can be selected and extended.
         CurveEnd anchor = new CurveEnd(straight ? end.pos().relative(end.outgoing()) : end.pos(),
                 end.outgoing().getOpposite());
@@ -1046,7 +1074,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
         if (!areCurveSegmentsWithinTurnLimit(tubes)) {
             error = "overpressure.routing.error.sharp";
         }
-        if (!canPlaceAll(level, tubes)) {
+        if (tubes.stream().noneMatch(tube -> tube.bezier != null) && !canPlaceAll(level, tubes)) {
             error = "overpressure.routing.error.blocked";
         }
         List<PlanTube> plan = new ArrayList<>();
@@ -1060,6 +1088,10 @@ public class PneumaticTubeBlockItem extends BlockItem {
                     tube.bezier == null ? null : tube.bezier.p1(),
                     tube.bezier == null ? null : tube.bezier.p2(),
                     tube.bezier == null ? null : tube.bezier.p3()));
+        }
+        var independent = com.hwmods.overpressure.tube.TubeSectionPlacement.fromPlan(plan);
+        if (independent != null && !com.hwmods.overpressure.tube.TubeSectionPlacement.canPlace(level, independent, null)) {
+            error = "overpressure.routing.error.blocked";
         }
         return new PlanResult(plan, error);
     }
@@ -1084,6 +1116,10 @@ public class PneumaticTubeBlockItem extends BlockItem {
     }
 
     public boolean isCurveStartValid(Level level, CurveStart start) {
+        if (start.sectionId() != null) {
+            var section = com.hwmods.overpressure.tube.TubeSections.get(level).get(start.sectionId());
+            return section != null && section.port(start.sectionStart()).direction() == start.direction();
+        }
         if (start.isDeviderPort()) {
             BlockState state = level.getBlockState(start.pos);
             if (state.getBlock() instanceof FilterPipeBlock) {
@@ -1099,6 +1135,12 @@ public class PneumaticTubeBlockItem extends BlockItem {
                     || start.deviderSide == DeviderBlock.getRightOutputDirection(state)));
         }
         return canStartCurveFrom(level, start.pos, level.getBlockState(start.pos), start.direction);
+    }
+
+    public void selectSectionEnd(Level level, Player player, com.hwmods.overpressure.tube.TubeSection.Port port) {
+        BlockPos anchor = BlockPos.containing(port.position().subtract(port.outward().scale(0.05)));
+        setSelectedStart(level, player, new CurveStart(anchor, port.direction(), null, port.section(), port.start()));
+        player.displayClientMessage(Component.translatable("overpressure.routing.started"), true);
     }
 
     public PlanResult planClientSection(
