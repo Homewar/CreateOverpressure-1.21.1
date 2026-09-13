@@ -187,7 +187,8 @@ public class PneumaticConnectionBlock extends BaseEntityBlock implements IWrench
         Direction facing = state.getValue(FACING);
 
         if (facing.getAxis().isVertical()) {
-            return state.getValue(ARROW_FACING);
+            // Vertical arrow models occupy both faces on ARROW_FACING's axis.
+            return state.getValue(ARROW_FACING).getClockWise();
         }
 
         return Direction.UP;
@@ -267,6 +268,7 @@ public class PneumaticConnectionBlock extends BaseEntityBlock implements IWrench
     }
 
     private boolean hasTube(LevelAccessor level, BlockPos pos, Direction direction) {
+        if (com.hwmods.overpressure.tube.TubeSections.connects(level, pos, direction)) return true;
         BlockState state = level.getBlockState(pos.relative(direction));
         if (state.getBlock() instanceof PneumaticTubeBlock) {
             return true;
@@ -278,6 +280,10 @@ public class PneumaticConnectionBlock extends BaseEntityBlock implements IWrench
                 && valve.canTravelTo(state, direction.getOpposite()))
                 || (state.getBlock() instanceof ClogSensorBlock sensor
                 && sensor.canTravelTo(state, direction.getOpposite()));
+    }
+
+    public BlockState refreshSectionConnection(Level level, BlockPos pos, BlockState state) {
+        return state.setValue(MODE, getModeFromNeighbors(level, pos, state));
     }
 
     private boolean hasInventory(LevelAccessor level, BlockPos pos, Direction direction) {

@@ -95,24 +95,10 @@ public class OverpressurePonderPlugin implements PonderPlugin {
             scene.world().showSection(util.select().layersFrom(1), Direction.DOWN);
             scene.idle(15);
 
-            scene.overlay().showText(70)
-                    .text("A curved section is a visual shell and may have no collision in some places.")
+            scene.overlay().showText(90)
+                    .text("To create a curved tube, click the starting node while holding a tube.")
                     .independent();
-            scene.idle(80);
-
-            scene.overlay().showOutline(PonderPalette.GREEN, new Object(),
-                    util.select().fromTo(6, 1, 0, 6, 1, 6), 70);
-            scene.overlay().showOutline(PonderPalette.GREEN, new Object(),
-                    util.select().fromTo(0, 1, 6, 6, 1, 6), 70);
-            scene.overlay().showText(70)
-                    .text("The actual path is formed by invisible tube blocks arranged at an angle.")
-                    .independent();
-            scene.idle(80);
-
-            scene.overlay().showText(70)
-                    .text("The entire structure behaves as one continuous tube section.")
-                    .independent();
-            scene.idle(80);
+            scene.idle(100);
 
             scene.markAsFinished();
         };

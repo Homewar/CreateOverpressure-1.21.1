@@ -148,6 +148,11 @@ public class PneumaticTubeRenderer implements BlockEntityRenderer<PneumaticTubeB
             int packedOverlay
     ) {
         Vec3 direction = getCapsuleDirection(tube, item, step);
+        renderCapsule(direction, poseStack, bufferSource, packedLight, packedOverlay);
+    }
+
+    private static void renderCapsule(Vec3 direction, PoseStack poseStack, MultiBufferSource bufferSource,
+                                      int packedLight, int packedOverlay) {
         rotateCapsule(poseStack, direction);
         poseStack.scale(CAPSULE_SCALE, CAPSULE_SCALE, CAPSULE_SCALE);
         poseStack.translate(-0.5, -0.25, -0.5);
@@ -171,6 +176,17 @@ public class PneumaticTubeRenderer implements BlockEntityRenderer<PneumaticTubeB
                         ModelData.EMPTY,
                         null
                 );
+    }
+
+    public static void renderSectionCargo(net.minecraft.world.level.Level level, net.minecraft.world.item.ItemStack stack,
+                                           Vec3 direction, PoseStack poseStack, MultiBufferSource buffers, int light) {
+        if (isCardboard(stack)) {
+            renderCapsule(direction, poseStack, buffers, light, net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY);
+        } else {
+            poseStack.scale(ITEM_SCALE, ITEM_SCALE, ITEM_SCALE);
+            Minecraft.getInstance().getItemRenderer().renderStatic(stack, ItemDisplayContext.FIXED, light,
+                    net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY, poseStack, buffers, level, 0);
+        }
     }
 
     private static Vec3 getCapsuleDirection(
@@ -610,6 +626,19 @@ public class PneumaticTubeRenderer implements BlockEntityRenderer<PneumaticTubeB
         Vec3 curveOrigin = Vec3.atLowerCornerOf(curvatureTube.getBlockPos().subtract(rendererPos));
         Vec3 p0 = curveOrigin.add(curvatureTube.getP0());
         Vec3 p3 = curveOrigin.add(curvatureTube.getP3());
+
+        // Curve owners follow a block grid path, which can be far from the
+        // rendered curve. Use the shared curve endpoint to determine direction.
+        if (curvatureTube.getLevel() != null && pathIndex + 1 < item.path.size()
+                && curvatureTube.getLevel().getBlockEntity(item.path.get(pathIndex + 1))
+                instanceof CurvaturePneumaticTubeEntity nextCurve) {
+            Vec3 nextOrigin = Vec3.atLowerCornerOf(nextCurve.getBlockPos().subtract(rendererPos));
+            Vec3 nextP0 = nextOrigin.add(nextCurve.getP0());
+            Vec3 nextP3 = nextOrigin.add(nextCurve.getP3());
+            double startDistance = Math.min(p0.distanceToSqr(nextP0), p0.distanceToSqr(nextP3));
+            double endDistance = Math.min(p3.distanceToSqr(nextP0), p3.distanceToSqr(nextP3));
+            return startDistance < endDistance;
+        }
 
         return p0.distanceToSqr(next) < p3.distanceToSqr(next);
     }

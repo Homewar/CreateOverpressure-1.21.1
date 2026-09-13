@@ -29,7 +29,7 @@
                                                                 10,
                                                                 1
                                                             ],
-                                                     "texture":  "#4"
+                                                     "texture": "#4"
                                                  },
                                        "east":  {
                                                     "uv":  [
@@ -38,7 +38,7 @@
                                                                10,
                                                                2
                                                            ],
-                                                    "texture":  "#4"
+                                                    "texture": "#4"
                                                 },
                                        "south":  {
                                                      "uv":  [
@@ -47,7 +47,7 @@
                                                                 10,
                                                                 3
                                                             ],
-                                                     "texture":  "#4"
+                                                     "texture": "#4"
                                                  },
                                        "west":  {
                                                     "uv":  [
@@ -56,7 +56,7 @@
                                                                10,
                                                                4
                                                            ],
-                                                    "texture":  "#4"
+                                                    "texture": "#4"
                                                 },
                                        "up":  {
                                                   "uv":  [
@@ -65,7 +65,7 @@
                                                              0,
                                                              5
                                                          ],
-                                                  "texture":  "#4"
+                                                  "texture": "#4"
                                               },
                                        "down":  {
                                                     "uv":  [
@@ -74,7 +74,7 @@
                                                                0,
                                                                10
                                                            ],
-                                                    "texture":  "#4",
+                                                    "texture": "#4",
                                                     "cullface":  "down"
                                                 }
                                    },

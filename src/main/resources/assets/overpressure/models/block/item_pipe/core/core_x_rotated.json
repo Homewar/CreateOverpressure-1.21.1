@@ -22,7 +22,7 @@
                                                                16
                                                            ],
                                                     "rotation":  90,
-                                                    "texture":  "#2"
+                                                    "tintindex": 0, "texture": "#2"
                                                 },
                                        "west":  {
                                                     "uv":  [
@@ -32,7 +32,7 @@
                                                                16
                                                            ],
                                                     "rotation":  90,
-                                                    "texture":  "#2"
+                                                    "tintindex": 0, "texture": "#2"
                                                 }
                                    }
                      }

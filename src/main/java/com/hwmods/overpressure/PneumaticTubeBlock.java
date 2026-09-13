@@ -6,6 +6,7 @@ import java.util.Optional;
 
 import javax.annotation.Nullable;
 
+import com.hwmods.overpressure.tube.TubeSections;
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.decoration.bracket.BracketBlock;
 import com.simibubi.create.content.decoration.bracket.BracketedBlockEntityBehaviour;
@@ -156,6 +157,18 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
             InteractionHand hand,
             BlockHitResult hit
     ) {
+        if (stack.is(net.minecraft.world.item.Items.GLOW_INK_SAC) && TubePainting.isTube(state)) {
+            if (!player.getAbilities().mayBuild || !level.mayInteract(player, pos)) return ItemInteractionResult.FAIL;
+            if (!level.isClientSide && TubePainting.glow(level, pos, player) > 0 && !player.isCreative()) stack.shrink(1);
+            return ItemInteractionResult.SUCCESS;
+        }
+        if (stack.getItem() instanceof net.minecraft.world.item.DyeItem dye && TubePainting.isTube(state)) {
+            if (!player.getAbilities().mayBuild || !level.mayInteract(player, pos)) return ItemInteractionResult.FAIL;
+            if (!level.isClientSide && TubePainting.paint(level, pos, player, dye.getDyeColor().getTextureDiffuseColor()) > 0) {
+                if (!player.isCreative()) stack.shrink(1);
+            }
+            return ItemInteractionResult.SUCCESS;
+        }
         ItemInteractionResult encasingResult = tryEncase(state, level, pos, stack, player, hand, hit);
         if (encasingResult != ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION) {
             return encasingResult;
@@ -236,7 +249,8 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
         for (Direction direction : Direction.values()) {
             BlockState neighborState = level.getBlockState(pos.relative(direction));
             boolean canConnect = canAddConnection(state, direction)
-                    && canNeighborAcceptConnection(neighborState, direction.getOpposite());
+                    && (canNeighborAcceptConnection(neighborState, direction.getOpposite())
+                    || com.hwmods.overpressure.tube.TubeSections.connects(level, pos, direction));
             state = state.setValue(getConnectionProperty(direction), canConnect);
         }
 
@@ -264,7 +278,8 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
         }
 
         boolean canConnect = canAddConnection(state, direction)
-                && canNeighborAcceptConnection(neighborState, direction.getOpposite());
+                && (canNeighborAcceptConnection(neighborState, direction.getOpposite())
+                || com.hwmods.overpressure.tube.TubeSections.connects(level, pos, direction));
         BlockState newState = state.setValue(getConnectionProperty(direction), canConnect);
         newState = newState.setValue(HAS_CONNECTION, !getConnectedDirections(newState).isEmpty());
 
@@ -544,8 +559,9 @@ public class PneumaticTubeBlock extends BaseEntityBlock implements SimpleWaterlo
         }
 
         BlockState neighborState = level.getBlockState(pos.relative(direction));
-        return neighborState.getBlock() instanceof CurvaturePneumaticTubeBlock
-                && neighborState.getValue(getConnectionProperty(direction.getOpposite()));
+        return (neighborState.getBlock() instanceof CurvaturePneumaticTubeBlock
+                && neighborState.getValue(getConnectionProperty(direction.getOpposite())))
+                || (level instanceof Level world && TubeSections.connects(world, pos, direction));
     }
 
     @Override

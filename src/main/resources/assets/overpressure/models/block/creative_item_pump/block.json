@@ -1,7 +1,7 @@
 {
   "parent": "overpressure:block/item_pump/block",
   "textures": {
-    "1": "create:block/creative_casing",
-    "particle": "create:block/creative_casing"
+    "1": "overpressure:block/item_pump/item_pump_creative",
+    "particle": "overpressure:block/item_pump/item_pump_creative"
   }
 }

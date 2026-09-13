@@ -20,7 +20,11 @@ import net.createmod.catnip.placement.PlacementOffset;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
@@ -28,6 +32,7 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -35,21 +40,28 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 
+@EventBusSubscriber(modid = Overpressure.MODID)
 public class PneumaticTubeBlockItem extends BlockItem {
     private static final Map<UUID, CurveStart> CURVE_STARTS = new HashMap<>();
     // Kept separate from the server state so route previews also work on dedicated servers.
     private static final Map<UUID, CurveStart> CLIENT_CURVE_STARTS = new HashMap<>();
+    private static final Map<UUID, ResourceKey<Level>> START_DIMENSIONS = new HashMap<>();
+    private static final Map<UUID, ResourceKey<Level>> CLIENT_START_DIMENSIONS = new HashMap<>();
+    private static final Map<UUID, Integer> PLACEMENT_REACH = new HashMap<>();
+    private static final Map<UUID, Integer> CLIENT_PLACEMENT_REACH = new HashMap<>();
     private static final int CURVE_SAMPLES_PER_BLOCK = 12;
     private static final int MIN_CURVE_SAMPLES = 24;
     private static final int CURVATURE_CHECK_SAMPLES = 32;
     private static final int CURVE_SEGMENT_TURN_CHECK_SAMPLES = 16;
     private static final double MIN_CURVATURE_RADIUS = 0.55;
-    private static final double MAX_SECOND_DERIVATIVE = 36.0;
     private static final double MAX_CURVE_SEGMENT_TURN_DEGREES = 60.0;
-    private static final String CURVE_SEGMENT_TOO_SHARP_MESSAGE =
-            "Tube curve cannot turn more than 60 degrees inside one block";
     private final int placementHelperId;
 
     public PneumaticTubeBlockItem(Block block, Properties properties) {
@@ -60,174 +72,93 @@ public class PneumaticTubeBlockItem extends BlockItem {
     @Override
     public InteractionResult onItemUseFirst(ItemStack stack, UseOnContext context) {
         Player player = context.getPlayer();
-
-        if (player == null || player.isShiftKeyDown()) {
+        if (player == null) {
             return super.onItemUseFirst(stack, context);
         }
-
+        if (getSelectedStart(context.getLevel(), player) != null) {
+            return finishPlacement(context.getLevel(), player, stack);
+        }
+        if (player.isShiftKeyDown()) {
+            return super.onItemUseFirst(stack, context);
+        }
         Level level = context.getLevel();
         BlockPos pos = context.getClickedPos();
         BlockState state = level.getBlockState(pos);
         IPlacementHelper helper = PlacementHelpers.get(placementHelperId);
-
         if (!helper.matchesState(state)) {
             return super.onItemUseFirst(stack, context);
         }
-
-        BlockHitResult hit = new BlockHitResult(
-                context.getClickLocation(),
-                context.getClickedFace(),
-                pos,
-                true
-        );
+        BlockHitResult hit = new BlockHitResult(context.getClickLocation(), context.getClickedFace(), pos, true);
         PlacementOffset offset = helper.getOffset(player, level, state, pos, hit);
-
         if (!offset.isSuccessful()) {
             return super.onItemUseFirst(stack, context);
         }
-
-        clearCurveStarts(player.getUUID());
         return offset.placeInWorld(level, this, player, context.getHand(), hit).result();
     }
 
     @Override
     public InteractionResult useOn(UseOnContext context) {
         Player player = context.getPlayer();
-
         if (player == null) {
             return super.useOn(context);
         }
-
         Level level = context.getLevel();
-        BlockPos clickedPos = context.getClickedPos();
-        BlockState clickedState = level.getBlockState(clickedPos);
-        Direction clickedFace = context.getClickedFace();
-
+        if (getSelectedStart(level, player) != null) {
+            return finishPlacement(level, player, context.getItemInHand());
+        }
+        BlockPos pos = context.getClickedPos();
+        BlockState state = level.getBlockState(pos);
+        Direction face = context.getClickedFace();
         if (player.isShiftKeyDown()) {
-            clearCurveStarts(player.getUUID());
-            if (canPlaceSingleTubeInWater(clickedState)) {
-                return placeSingleTubeInWater(context, player, clickedPos);
-            }
-
-            return super.useOn(context);
+            return canPlaceSingleTubeInWater(state)
+                    ? placeSingleTubeInWater(context, player, pos) : super.useOn(context);
         }
-
-        CurveStart deviderStart = getDeviderCurveStart(
-                clickedPos,
-                clickedState,
-                clickedFace,
-                context.getClickLocation()
-        );
-        if (deviderStart != null) {
-            return selectOrConnectDevider(level, player, context.getItemInHand(), deviderStart);
+        CurveStart selected = getDeviderCurveStart(pos, state, face, context.getClickLocation());
+        if (selected == null && canStartCurveFrom(level, pos, state, face)) {
+            selected = new CurveStart(pos, face);
         }
-
-        // Прямой участок трубы (две соединённые стороны на одной оси) не может быть
-        // точкой начала построения пути — только вход/выход (торцы) и концы кривых
-        // участков могут им быть.
-        if (isStraightSection(clickedState)) {
-            clearCurveStarts(player.getUUID());
-            return super.useOn(context);
+        if (selected == null) {
+            return canPlaceSingleTubeInWater(state)
+                    ? placeSingleTubeInWater(context, player, pos) : super.useOn(context);
         }
-
-        if (isFullyConnectedTube(clickedState) && !isCurvatureEndpoint(clickedState)) {
-            clearCurveStarts(player.getUUID());
-
-            if (level.isClientSide) {
-                return InteractionResult.SUCCESS;
-            }
-
-            player.displayClientMessage(Component.literal("Tube already has both neighbors"), true);
-            return InteractionResult.CONSUME;
+        setSelectedStart(level, player, selected);
+        if (!level.isClientSide) {
+            player.displayClientMessage(Component.translatable("overpressure.routing.started"), true);
         }
-
-        if (!canStartCurveFrom(level, clickedPos, clickedState, clickedFace)) {
-            clearCurveStarts(player.getUUID());
-            if (canPlaceSingleTubeInWater(clickedState)) {
-                return placeSingleTubeInWater(context, player, clickedPos);
-            }
-
-            return super.useOn(context);
-        }
-
-        UUID playerId = player.getUUID();
-
-        if (level.isClientSide) {
-            CurveStart clientStart = CLIENT_CURVE_STARTS.get(playerId);
-            if (clientStart == null) {
-                CLIENT_CURVE_STARTS.put(playerId, new CurveStart(clickedPos, clickedFace));
-            } else if (clientStart.pos.equals(clickedPos) && clientStart.direction == clickedFace) {
-                CLIENT_CURVE_STARTS.remove(playerId);
-            } else if (planSection(level, clientStart, new CurveEnd(clickedPos, clickedFace)).valid()) {
-                CLIENT_CURVE_STARTS.remove(playerId);
-            }
-            return InteractionResult.SUCCESS;
-        }
-
-        CurveStart start = CURVE_STARTS.remove(playerId);
-
-        if (start != null && !isCurveStartValid(level, start)) {
-            start = null;
-        }
-
-        if (start == null) {
-            CURVE_STARTS.put(playerId, new CurveStart(clickedPos, clickedFace));
-            return InteractionResult.CONSUME;
-        }
-
-        if (start.pos.equals(clickedPos) && start.direction == clickedFace) {
-            return InteractionResult.CONSUME;
-        }
-
-        CurveEnd end = new CurveEnd(clickedPos, clickedFace);
-        boolean built = buildTubeSection(level, player, context.getItemInHand(), start, end);
-
-        if (!built) {
-            CURVE_STARTS.put(playerId, start);
-        }
-
-        return InteractionResult.CONSUME;
+        return InteractionResult.sidedSuccess(level.isClientSide);
     }
 
-    private InteractionResult selectOrConnectDevider(
-            Level level,
-            Player player,
-            ItemStack stack,
-            CurveStart selected
-    ) {
-        UUID playerId = player.getUUID();
-        Map<UUID, CurveStart> starts = level.isClientSide ? CLIENT_CURVE_STARTS : CURVE_STARTS;
-        CurveStart current = starts.get(playerId);
-
-        if (current != null && !isCurveStartValid(level, current)) {
-            starts.remove(playerId);
-            current = null;
+    @Override
+    public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
+        ItemStack stack = player.getItemInHand(hand);
+        if (getSelectedStart(level, player) == null) {
+            return super.use(level, player, hand);
         }
+        return new InteractionResultHolder<>(finishPlacement(level, player, stack), stack);
+    }
 
-        if (current != null && !current.isDeviderPort()) {
-            CurveEnd originalStartAsEnd = new CurveEnd(current.pos, current.direction);
-
-            if (level.isClientSide) {
-                if (planSection(level, selected, originalStartAsEnd).valid()) {
-                    starts.remove(playerId);
-                }
-                return InteractionResult.SUCCESS;
+    private InteractionResult finishPlacement(Level level, Player player, ItemStack stack) {
+        CurveStart start = getSelectedStart(level, player);
+        if (start == null) {
+            return InteractionResult.PASS;
+        }
+        BlockHitResult hit = placementHit(level, player);
+        if (player.isShiftKeyDown()
+                || hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(start.pos)) {
+            setSelectedStart(level, player, null);
+            if (!level.isClientSide) {
+                player.displayClientMessage(Component.translatable("overpressure.routing.cancelled"), true);
             }
-
-            starts.remove(playerId);
-            if (!buildTubeSection(level, player, stack, selected, originalStartAsEnd)) {
-                starts.put(playerId, current);
-            }
-            return InteractionResult.CONSUME;
+            return InteractionResult.sidedSuccess(level.isClientSide);
         }
-
-        if (selected.equals(current)) {
-            starts.remove(playerId);
-        } else {
-            starts.put(playerId, selected);
+        PlacementPreview preview = previewPlacement(level, player, start);
+        // Keep the client anchor until the server acknowledges the placement,
+        // including failures caused by missing materials or a changed world.
+        if (!level.isClientSide) {
+            boolean built = buildTubeSection(level, player, stack, preview.plan());
+            setSelectedStart(level, player, built ? null : start);
         }
-
-        return level.isClientSide ? InteractionResult.SUCCESS : InteractionResult.CONSUME;
+        return InteractionResult.sidedSuccess(level.isClientSide);
     }
 
     @Nullable
@@ -309,90 +240,76 @@ public class PneumaticTubeBlockItem extends BlockItem {
         return InteractionResult.CONSUME;
     }
 
-    private boolean buildTubeSection(Level level, Player player, ItemStack stack, CurveStart start, CurveEnd end) {
-        BlockPos startPos = getStartTubePos(start);
-        BlockPos endPos = end.pos.relative(end.direction);
-
-        if (startPos.equals(endPos)) {
+    private boolean buildTubeSection(Level level, Player player, ItemStack stack, PlanResult plan) {
+        if (!plan.valid()) {
+            player.displayClientMessage(Component.translatable(plan.errorMessage()), true);
             return false;
         }
-
-        if (!isInSinglePlane(startPos, endPos)) {
-            player.displayClientMessage(Component.literal("Tube curve must stay in one fixed X/Y/Z plane"), false);
+        if (!player.getAbilities().mayBuild || !player.getAbilities().instabuild && stack.getCount() < plan.tubes().size()) {
+            player.displayClientMessage(Component.translatable("overpressure.routing.error.items"), true);
             return false;
         }
-
-        if (start.isDeviderOutput() || !isStraight(startPos, endPos)) {
-            Direction endTravelDirection = end.direction.getOpposite();
-
-            if (getCurvePlaneFixedAxis(start, startPos, endPos, endTravelDirection) == null) {
-                player.displayClientMessage(Component.literal("Tube curve endpoints must face inside one plane"), true);
+        var independent = com.hwmods.overpressure.tube.TubeSectionPlacement.fromPlan(plan.tubes());
+        if (independent != null) {
+            if (!com.hwmods.overpressure.tube.TubeSectionPlacement.canPlace(level, independent, player)) {
+                player.displayClientMessage(Component.translatable("overpressure.routing.error.blocked"), true);
                 return false;
             }
-
-            CubicBezier curve = createFullBezierCurve(start, startPos, endPos, endTravelDirection);
-
-            if (!start.isDeviderOutput() && !isCurveSmoothEnough(curve)) {
-                player.displayClientMessage(Component.literal("Tube curve is too sharp"), true);
+            com.hwmods.overpressure.tube.TubeSections.put(level, independent);
+            if (!player.getAbilities().instabuild) stack.shrink(independent.materialCost());
+            player.displayClientMessage(Component.translatable("overpressure.routing.built", independent.materialCost()), true);
+            return true;
+        }
+        for (PlanTube tube : plan.tubes()) {
+            if (!level.mayInteract(player, tube.pos())
+                    || !player.mayUseItemAt(tube.pos(), Direction.UP, stack)) {
+                player.displayClientMessage(Component.translatable("overpressure.routing.error.blocked"), true);
                 return false;
             }
         }
 
-        List<PlacedTube> tubes = buildPlacedTubes(start, startPos, end, endPos);
-
-        if (tubes.isEmpty()) {
-            player.displayClientMessage(Component.literal("Tube section is blocked"), true);
-            return false;
-        }
-
-        if (!areCurveSegmentsWithinTurnLimit(tubes)) {
-            player.displayClientMessage(Component.literal(CURVE_SEGMENT_TOO_SHARP_MESSAGE), true);
-            return false;
-        }
-
-        if (!canPlaceAll(level, tubes)) {
-            player.displayClientMessage(Component.literal("Tube section is blocked"), true);
-            return false;
-        }
-
-        if (!player.getAbilities().instabuild && stack.getCount() < tubes.size()) {
-            player.displayClientMessage(Component.literal("Not enough pneumatic tubes"), true);
-            return false;
-        }
-
-        List<BlockPos> curvatureTubePositions = new ArrayList<>();
-        UUID curvatureSectionId = UUID.randomUUID();
-
-        for (PlacedTube tube : tubes) {
-            BlockState state = tube.state;
-
+        UUID sectionId = UUID.randomUUID();
+        Map<BlockPos, BlockState> replaced = new java.util.LinkedHashMap<>();
+        for (PlanTube tube : plan.tubes()) {
+            BlockState state = tube.state();
             if (state.hasProperty(PneumaticTubeBlock.WATERLOGGED)) {
-                state = state.setValue(
-                        PneumaticTubeBlock.WATERLOGGED,
-                        level.getFluidState(tube.pos).is(Fluids.WATER)
-                );
+                state = state.setValue(PneumaticTubeBlock.WATERLOGGED,
+                        level.getFluidState(tube.pos()).is(Fluids.WATER));
             }
-
             if (state.getBlock() instanceof PneumaticTubeBlock tubeBlock) {
-                state = tubeBlock.applyPreferredRim(level, tube.pos, state);
+                state = tubeBlock.applyPreferredRim(level, tube.pos(), state);
             }
-
-            level.setBlock(tube.pos, state, Block.UPDATE_ALL);
-
-            if (state.getBlock() instanceof CurvaturePneumaticTubeBlock) {
-                applyBezierCurve(level, tube, curvatureSectionId);
-                curvatureTubePositions.add(tube.pos);
+            replaced.put(tube.pos(), level.getBlockState(tube.pos()));
+            if (!level.setBlock(tube.pos(), state, Block.UPDATE_ALL)) {
+                replaced.forEach((pos, original) -> level.setBlock(pos, original, Block.UPDATE_ALL));
+                player.displayClientMessage(Component.translatable("overpressure.routing.error.blocked"), true);
+                return false;
+            }
+            if (tube.curveP0() != null
+                    && level.getBlockEntity(tube.pos()) instanceof CurvaturePneumaticTubeEntity curve) {
+                curve.setCurve(tube.curveP0(), tube.curveP1(), tube.curveP2(), tube.curveP3());
             }
         }
-
+        // Join the section only after placement succeeds, so rolling back a
+        // partial build cannot trigger section-wide destruction and item drops.
+        for (PlanTube tube : plan.tubes()) {
+            if (level.getBlockEntity(tube.pos()) instanceof CurvaturePneumaticTubeEntity curve) {
+                curve.setSectionId(sectionId);
+            }
+        }
         if (!player.getAbilities().instabuild) {
-            stack.shrink(tubes.size());
+            stack.shrink(plan.tubes().size());
         }
-
+        player.displayClientMessage(Component.translatable("overpressure.routing.built", plan.tubes().size()), true);
         return true;
     }
 
     private List<PlacedTube> buildPlacedTubes(CurveStart start, BlockPos startPos, CurveEnd end, BlockPos endPos) {
+        if (startPos.equals(endPos) && !start.isDeviderOutput()
+                && start.direction == end.direction.getOpposite()) {
+            return List.of(new PlacedTube(startPos,
+                    createTubeState(false, start.direction.getOpposite(), start.direction), null));
+        }
         if (!start.isDeviderOutput() && isStraight(startPos, endPos)) {
             Direction direction = directionAlongLine(startPos, endPos);
 
@@ -691,8 +608,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
     private boolean isCurveSmoothEnough(CubicBezier curve) {
         return curve.satisfiesCurvatureLimits(
                 CURVATURE_CHECK_SAMPLES,
-                MIN_CURVATURE_RADIUS,
-                MAX_SECOND_DERIVATIVE
+                MIN_CURVATURE_RADIUS
         );
     }
 
@@ -708,34 +624,23 @@ public class PneumaticTubeBlockItem extends BlockItem {
         return true;
     }
 
-    private void applyBezierCurve(Level level, PlacedTube tube, UUID sectionId) {
-        if (tube.bezier == null) {
-            return;
-        }
-
-        BlockEntity blockEntity = level.getBlockEntity(tube.pos);
-
-        if (blockEntity instanceof CurvaturePneumaticTubeEntity curvatureTube) {
-            curvatureTube.setSectionId(sectionId);
-            curvatureTube.setCurve(
-                    tube.bezier.p0(),
-                    tube.bezier.p1(),
-                    tube.bezier.p2(),
-                    tube.bezier.p3()
-            );
-        }
-    }
 
     private boolean canPlaceAll(Level level, List<PlacedTube> tubes) {
         for (PlacedTube tube : tubes) {
-            BlockState state = level.getBlockState(tube.pos);
-
-            if (!state.isAir() && !level.getFluidState(tube.pos).is(Fluids.WATER)) {
+            if (!canPlaceAt(level, tube.pos)) {
                 return false;
             }
         }
 
         return true;
+    }
+
+    private boolean canPlaceAt(Level level, BlockPos pos) {
+        if (level.isOutsideBuildHeight(pos) || !level.getWorldBorder().isWithinBounds(pos) || !level.isLoaded(pos)) {
+            return false;
+        }
+        BlockState state = level.getBlockState(pos);
+        return state.canBeReplaced() && (state.getFluidState().isEmpty() || state.getFluidState().is(Fluids.WATER));
     }
 
     private boolean canStartCurveFrom(Level level, BlockPos pos, BlockState state, Direction direction) {
@@ -787,65 +692,6 @@ public class PneumaticTubeBlockItem extends BlockItem {
         return connections == 1 && direction == openEnd;
     }
 
-    private boolean isFullyConnectedTube(BlockState state) {
-        return state.getBlock() instanceof PneumaticTubeBlock && countTubeConnections(state) >= 2;
-    }
-
-    private boolean isStraightSection(BlockState state) {
-        if (!(state.getBlock() instanceof PneumaticTubeBlock)) {
-            return false;
-        }
-
-        List<Direction> connected = new ArrayList<>();
-
-        for (Direction direction : Direction.values()) {
-            if (state.getValue(PneumaticTubeBlock.getConnectionProperty(direction))) {
-                connected.add(direction);
-            }
-        }
-
-        if (connected.size() != 2) {
-            return false;
-        }
-
-        return connected.get(0).getAxis() == connected.get(1).getAxis();
-    }
-
-    private boolean isCurvatureEndpoint(BlockState state) {
-        if (state.getBlock() instanceof CurvaturePneumaticTubeBlock) {
-            return true;
-        }
-
-        if (!(state.getBlock() instanceof PneumaticTubeBlock)) {
-            return false;
-        }
-
-        List<Direction> connected = new ArrayList<>();
-
-        for (Direction direction : Direction.values()) {
-            if (state.getValue(PneumaticTubeBlock.getConnectionProperty(direction))) {
-                connected.add(direction);
-            }
-        }
-
-        if (connected.size() != 2) {
-            return false;
-        }
-
-        return connected.get(0).getAxis() != connected.get(1).getAxis();
-    }
-
-    private int countTubeConnections(BlockState state) {
-        int connections = 0;
-
-        for (Direction direction : Direction.values()) {
-            if (state.getValue(PneumaticTubeBlock.getConnectionProperty(direction))) {
-                connections++;
-            }
-        }
-
-        return connections;
-    }
 
     private boolean isStraight(BlockPos startPos, BlockPos endPos) {
         return startPos.getX() == endPos.getX() && startPos.getY() == endPos.getY()
@@ -952,7 +798,11 @@ public class PneumaticTubeBlockItem extends BlockItem {
     private record PlacedTube(BlockPos pos, BlockState state, @Nullable CubicBezier bezier) {
     }
 
-    public record CurveStart(BlockPos pos, Direction direction, @Nullable Direction deviderSide) {
+    public record CurveStart(BlockPos pos, Direction direction, @Nullable Direction deviderSide,
+                             @Nullable UUID sectionId, boolean sectionStart) {
+        public CurveStart(BlockPos pos, Direction direction, @Nullable Direction deviderSide) {
+            this(pos, direction, deviderSide, null, false);
+        }
         public CurveStart(BlockPos pos, Direction direction) {
             this(pos, direction, null);
         }
@@ -1022,6 +872,149 @@ public class PneumaticTubeBlockItem extends BlockItem {
     private static void clearCurveStarts(UUID playerId) {
         CURVE_STARTS.remove(playerId);
         CLIENT_CURVE_STARTS.remove(playerId);
+        START_DIMENSIONS.remove(playerId);
+        CLIENT_START_DIMENSIONS.remove(playerId);
+        PLACEMENT_REACH.remove(playerId);
+        CLIENT_PLACEMENT_REACH.remove(playerId);
+    }
+
+    @SubscribeEvent
+    static void onLogout(PlayerEvent.PlayerLoggedOutEvent event) {
+        clearCurveStarts(event.getEntity().getUUID());
+    }
+
+    @SubscribeEvent
+    static void onDimensionChange(PlayerEvent.PlayerChangedDimensionEvent event) {
+        setSelectedStart(event.getEntity().level(), event.getEntity(), null);
+    }
+
+    @Nullable
+    public CurveStart getSelectedStart(Level level, Player player) {
+        Map<UUID, CurveStart> starts = level.isClientSide ? CLIENT_CURVE_STARTS : CURVE_STARTS;
+        Map<UUID, ResourceKey<Level>> dimensions = level.isClientSide ? CLIENT_START_DIMENSIONS : START_DIMENSIONS;
+        CurveStart start = starts.get(player.getUUID());
+        if (start != null && (!level.dimension().equals(dimensions.get(player.getUUID()))
+                || !level.isLoaded(start.pos()) || !isCurveStartValid(level, start))) {
+            setSelectedStart(level, player, null);
+            return null;
+        }
+        return start;
+    }
+
+    private static void setSelectedStart(Level level, Player player, @Nullable CurveStart start) {
+        Map<UUID, CurveStart> starts = level.isClientSide ? CLIENT_CURVE_STARTS : CURVE_STARTS;
+        Map<UUID, ResourceKey<Level>> dimensions = level.isClientSide ? CLIENT_START_DIMENSIONS : START_DIMENSIONS;
+        if (start == null || !start.equals(starts.get(player.getUUID()))) {
+            (level.isClientSide ? CLIENT_PLACEMENT_REACH : PLACEMENT_REACH).remove(player.getUUID());
+        }
+        if (start == null) {
+            starts.remove(player.getUUID());
+            dimensions.remove(player.getUUID());
+        } else {
+            starts.put(player.getUUID(), start);
+            dimensions.put(player.getUUID(), level.dimension());
+        }
+        if (player instanceof ServerPlayer serverPlayer) {
+            PacketDistributor.sendToPlayer(serverPlayer, new TubePlacementSyncPayload(level.dimension().location(), start));
+        }
+    }
+
+    public static void applyClientSelection(Player player, @Nullable CurveStart start) {
+        if (player.level().isClientSide) {
+            setSelectedStart(player.level(), player, start);
+        }
+    }
+
+    public record PlacementPreview(PlanResult plan, BlockPos endPos, Direction outgoing, boolean connected) {
+    }
+
+    public int getPlacementReach(Player player, CurveStart start) {
+        Map<UUID, Integer> reaches = player.level().isClientSide ? CLIENT_PLACEMENT_REACH : PLACEMENT_REACH;
+        int automaticReach = (int) Math.round(Math.max(6.0, Math.min(24.0,
+                player.getEyePosition().distanceTo(Vec3.atCenterOf(getStartTubePos(start))) + 6.0)));
+        return reaches.getOrDefault(player.getUUID(), automaticReach);
+    }
+
+    public void setPlacementReach(Player player, int reach) {
+        if (getSelectedStart(player.level(), player) == null) {
+            return;
+        }
+        int clamped = Math.max(2, Math.min(TubePlacementTargeting.MAX_DISTANCE, reach));
+        (player.level().isClientSide ? CLIENT_PLACEMENT_REACH : PLACEMENT_REACH).put(player.getUUID(), clamped);
+    }
+
+    private static BlockHitResult placementHit(Level level, Player player) {
+        Vec3 eye = player.getEyePosition();
+        int reach = (level.isClientSide ? CLIENT_PLACEMENT_REACH : PLACEMENT_REACH)
+                .getOrDefault(player.getUUID(), TubePlacementTargeting.MAX_DISTANCE);
+        Vec3 target = eye.add(player.getLookAngle().scale(reach));
+        return level.clip(new ClipContext(eye, target, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player));
+    }
+
+    public PlacementPreview previewPlacement(Level level, Player player, CurveStart start) {
+        var sectionHit = com.hwmods.overpressure.tube.TubeSectionInteractions.hit(player, TubePlacementTargeting.MAX_DISTANCE);
+        if (sectionHit != null && !sectionHit.section().id().equals(start.sectionId())) {
+            boolean firstEnd = sectionHit.point().distanceToSqr(sectionHit.section().port(true).position())
+                    < sectionHit.point().distanceToSqr(sectionHit.section().port(false).position());
+            var port = sectionHit.section().port(firstEnd);
+            if (sectionHit.point().distanceTo(port.position()) < 0.8) {
+                BlockPos anchor = BlockPos.containing(port.position().subtract(port.outward().scale(0.05)));
+                return new PlacementPreview(planSection(level, start, new CurveEnd(anchor, port.direction())), anchor, port.direction().getOpposite(), true);
+            }
+        }
+        BlockHitResult hit = placementHit(level, player);
+        BlockPos first = getStartTubePos(start);
+        if (hit.getType() == HitResult.Type.BLOCK && !hit.getBlockPos().equals(start.pos())) {
+            BlockPos pos = hit.getBlockPos();
+            BlockState state = level.getBlockState(pos);
+            CurveStart divider = getDeviderCurveStart(pos, state, hit.getDirection(), hit.getLocation());
+            if (divider != null && !start.isDeviderPort()) {
+                return new PlacementPreview(planSection(level, divider, new CurveEnd(start.pos(), start.direction())),
+                        pos, hit.getDirection().getOpposite(), true);
+            }
+            if (canStartCurveFrom(level, pos, state, hit.getDirection())) {
+                return new PlacementPreview(planSection(level, start, new CurveEnd(pos, hit.getDirection())),
+                        pos, hit.getDirection().getOpposite(), true);
+            }
+        }
+
+        Vec3 aim;
+        if (hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(start.pos())) {
+            aim = Vec3.atCenterOf(first.relative(start.direction(), getPlacementReach(player, start) - 1));
+        } else if (hit.getType() == HitResult.Type.BLOCK) {
+            BlockPos target = level.getBlockState(hit.getBlockPos()).canBeReplaced()
+                    ? hit.getBlockPos() : hit.getBlockPos().relative(hit.getDirection());
+            aim = Vec3.atCenterOf(target);
+        } else {
+            double reach = getPlacementReach(player, start);
+            aim = player.getEyePosition().add(player.getLookAngle().scale(reach));
+        }
+        TubePlacementTargeting.FreeEnd end = TubePlacementTargeting.resolve(
+                first, start.direction(), start.isDeviderOutput() ? start.deviderSide() : null,
+                aim, player.getLookAngle());
+        return new PlacementPreview(planFreeSection(level, start, end), end.pos(), end.outgoing(), false);
+    }
+
+    private PlanResult planFreeSection(Level level, CurveStart start, TubePlacementTargeting.FreeEnd end) {
+        BlockPos first = getStartTubePos(start);
+        boolean straight = !start.isDeviderOutput() && isStraight(first, end.pos());
+        if (!straight) {
+            return planSection(level, start, new CurveEnd(end.pos().relative(end.outgoing()), end.outgoing().getOpposite()));
+        }
+        // Leave a regular tube at the free end so it can be selected and extended.
+        CurveEnd anchor = new CurveEnd(straight ? end.pos().relative(end.outgoing()) : end.pos(),
+                end.outgoing().getOpposite());
+        PlanResult section = planSection(level, start, anchor);
+        List<PlanTube> tubes = new ArrayList<>(section.tubes());
+        PlanTube tip = new PlanTube(end.pos(), createTubeState(false, end.outgoing().getOpposite()), null, null, null, null);
+        if (straight && !tubes.isEmpty() && tubes.getLast().pos().equals(end.pos())) {
+            tubes.set(tubes.size() - 1, tip);
+        } else {
+            tubes.add(tip);
+        }
+        boolean tipBlocked = !canPlaceAt(level, end.pos());
+        return new PlanResult(tubes, section.errorMessage() != null ? section.errorMessage()
+                : tipBlocked ? "overpressure.routing.error.blocked" : null);
     }
 
     /**
@@ -1048,68 +1041,67 @@ public class PneumaticTubeBlockItem extends BlockItem {
             return new PlanResult(List.of(), null);
         }
 
-        BlockState state = tubeBlock.getTubeStateForPlacement(level, clickedPos);
-        PlanTube tube = new PlanTube(clickedPos, state, null, null, null, null);
-        return new PlanResult(List.of(tube), null);
+        BlockPos pos = level.getBlockState(clickedPos).canBeReplaced() ? clickedPos : clickedPos.relative(clickedFace);
+        BlockState state = tubeBlock.getTubeStateForPlacement(level, pos);
+        PlanTube tube = new PlanTube(pos, state, null, null, null, null);
+        return new PlanResult(List.of(tube), canPlaceAt(level, pos) ? null : "overpressure.routing.error.blocked");
     }
 
     private PlanResult planSection(Level level, CurveStart start, CurveEnd end) {
         BlockPos startPos = getStartTubePos(start);
         BlockPos endPos = end.pos.relative(end.direction);
-
-        if (startPos.equals(endPos)) {
-            return new PlanResult(List.of(), "Tube curve is too short");
+        String error = null;
+        if (startPos.distSqr(endPos) > TubePlacementTargeting.MAX_DISTANCE * TubePlacementTargeting.MAX_DISTANCE) {
+            return invalidSectionPreview(start, startPos, end, endPos, "overpressure.routing.error.long");
         }
-
         if (!isInSinglePlane(startPos, endPos)) {
-            return new PlanResult(List.of(), "Tube curve must stay in one fixed X/Y/Z plane");
+            return invalidSectionPreview(start, startPos, end, endPos, "overpressure.routing.error.plane");
         }
-
         if (start.isDeviderOutput() || !isStraight(startPos, endPos)) {
             Direction endTravelDirection = end.direction.getOpposite();
-
             if (getCurvePlaneFixedAxis(start, startPos, endPos, endTravelDirection) == null) {
-                return new PlanResult(List.of(), "Tube curve endpoints must face inside one plane");
+                return invalidSectionPreview(start, startPos, end, endPos, "overpressure.routing.error.direction");
             }
-
             CubicBezier curve = createFullBezierCurve(start, startPos, endPos, endTravelDirection);
-
             if (!start.isDeviderOutput() && !isCurveSmoothEnough(curve)) {
-                return new PlanResult(List.of(), "Tube curve is too sharp");
+                error = "overpressure.routing.error.sharp";
             }
         }
-
         List<PlacedTube> tubes = buildPlacedTubes(start, startPos, end, endPos);
-
         if (tubes.isEmpty()) {
-            return new PlanResult(List.of(), "Invalid tube layout");
+            return invalidSectionPreview(start, startPos, end, endPos, "overpressure.routing.error.direction");
         }
-
         if (!areCurveSegmentsWithinTurnLimit(tubes)) {
-            return new PlanResult(List.of(), CURVE_SEGMENT_TOO_SHARP_MESSAGE);
+            error = "overpressure.routing.error.sharp";
         }
-
-        boolean blocked = !canPlaceAll(level, tubes);
-
+        if (tubes.stream().noneMatch(tube -> tube.bezier != null) && !canPlaceAll(level, tubes)) {
+            error = "overpressure.routing.error.blocked";
+        }
         List<PlanTube> plan = new ArrayList<>();
-
         for (PlacedTube tube : tubes) {
             BlockState state = tube.state;
             if (state.getBlock() instanceof PneumaticTubeBlock tubeBlock) {
                 state = tubeBlock.applyPreferredRim(level, tube.pos, state);
             }
-
-            plan.add(new PlanTube(
-                    tube.pos,
-                    state,
+            plan.add(new PlanTube(tube.pos, state,
                     tube.bezier == null ? null : tube.bezier.p0(),
                     tube.bezier == null ? null : tube.bezier.p1(),
                     tube.bezier == null ? null : tube.bezier.p2(),
-                    tube.bezier == null ? null : tube.bezier.p3()
-            ));
+                    tube.bezier == null ? null : tube.bezier.p3()));
         }
+        var independent = com.hwmods.overpressure.tube.TubeSectionPlacement.fromPlan(plan);
+        if (independent != null && !com.hwmods.overpressure.tube.TubeSectionPlacement.canPlace(level, independent, null)) {
+            error = "overpressure.routing.error.blocked";
+        }
+        return new PlanResult(plan, error);
+    }
 
-        return new PlanResult(plan, blocked ? "Tube section is blocked" : null);
+    private PlanResult invalidSectionPreview(CurveStart start, BlockPos first, CurveEnd end, BlockPos last, String error) {
+        CubicBezier curve = createFullBezierCurve(start, first, last, end.direction().getOpposite())
+                .offset(Vec3.atLowerCornerOf(first));
+        PlanTube ghost = new PlanTube(first, createTubeState(true, start.direction().getOpposite()),
+                curve.p0(), curve.p1(), curve.p2(), curve.p3());
+        return new PlanResult(List.of(ghost), error);
     }
 
     @Nullable
@@ -1119,9 +1111,15 @@ public class PneumaticTubeBlockItem extends BlockItem {
 
     public static void clearClientCurveStart(UUID playerId) {
         CLIENT_CURVE_STARTS.remove(playerId);
+        CLIENT_START_DIMENSIONS.remove(playerId);
+        CLIENT_PLACEMENT_REACH.remove(playerId);
     }
 
     public boolean isCurveStartValid(Level level, CurveStart start) {
+        if (start.sectionId() != null) {
+            var section = com.hwmods.overpressure.tube.TubeSections.get(level).get(start.sectionId());
+            return section != null && section.port(start.sectionStart()).direction() == start.direction();
+        }
         if (start.isDeviderPort()) {
             BlockState state = level.getBlockState(start.pos);
             if (state.getBlock() instanceof FilterPipeBlock) {
@@ -1137,6 +1135,12 @@ public class PneumaticTubeBlockItem extends BlockItem {
                     || start.deviderSide == DeviderBlock.getRightOutputDirection(state)));
         }
         return canStartCurveFrom(level, start.pos, level.getBlockState(start.pos), start.direction);
+    }
+
+    public void selectSectionEnd(Level level, Player player, com.hwmods.overpressure.tube.TubeSection.Port port) {
+        BlockPos anchor = BlockPos.containing(port.position().subtract(port.outward().scale(0.05)));
+        setSelectedStart(level, player, new CurveStart(anchor, port.direction(), null, port.section(), port.start()));
+        player.displayClientMessage(Component.translatable("overpressure.routing.started"), true);
     }
 
     public PlanResult planClientSection(

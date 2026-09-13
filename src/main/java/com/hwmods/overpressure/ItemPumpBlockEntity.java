@@ -19,6 +19,7 @@ import net.minecraft.world.level.block.state.BlockState;
 public class ItemPumpBlockEntity extends KineticBlockEntity
         implements IHaveGoggleInformation, TransportFlowSource, TransportGate {
     private static final float RPM_TICK_SCALE = 512.0f;
+    private CreativePumpSpeedBehaviour creativeSpeed;
 
     public ItemPumpBlockEntity(BlockPos pos, BlockState state) {
         this(ModBlockEntities.ITEM_PUMP.get(), pos, state);
@@ -31,6 +32,10 @@ public class ItemPumpBlockEntity extends KineticBlockEntity
     @Override
     public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
         super.addBehaviours(behaviours);
+        if (isCreative()) {
+            creativeSpeed = new CreativePumpSpeedBehaviour(this);
+            behaviours.add(creativeSpeed);
+        }
     }
 
     @Override
@@ -53,11 +58,7 @@ public class ItemPumpBlockEntity extends KineticBlockEntity
     }
 
     public int getMoveTime() {
-        if (isCreative()) {
-            return Config.applyTubeSpeed(PneumaticTubeBlockEntity.MIN_PUMPED_MOVE_TIME);
-        }
-
-        float speed = Math.abs(getSpeed());
+        float speed = isCreative() ? (creativeSpeed == null ? 256 : creativeSpeed.getValue()) : Math.abs(getSpeed());
 
         if (speed <= 0.0f) {
             return 0;

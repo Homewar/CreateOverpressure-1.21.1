@@ -30,7 +30,7 @@
                                                                 3
                                                             ],
                                                      "rotation":  270,
-                                                     "texture":  "#4"
+                                                     "texture": "#4"
                                                  },
                                        "east":  {
                                                     "uv":  [
@@ -39,7 +39,7 @@
                                                                5,
                                                                10
                                                            ],
-                                                    "texture":  "#4"
+                                                    "texture": "#4"
                                                 },
                                        "south":  {
                                                      "uv":  [
@@ -49,7 +49,7 @@
                                                                 3
                                                             ],
                                                      "rotation":  270,
-                                                     "texture":  "#4"
+                                                     "texture": "#4"
                                                  },
                                        "west":  {
                                                     "uv":  [
@@ -58,7 +58,7 @@
                                                                5,
                                                                10
                                                            ],
-                                                    "texture":  "#4",
+                                                    "texture": "#4",
                                                     "cullface":  "west"
                                                 },
                                        "up":  {
@@ -69,7 +69,7 @@
                                                              1
                                                          ],
                                                   "rotation":  90,
-                                                  "texture":  "#4"
+                                                  "texture": "#4"
                                               },
                                        "down":  {
                                                     "uv":  [
@@ -79,7 +79,7 @@
                                                                1
                                                            ],
                                                     "rotation":  270,
-                                                    "texture":  "#4"
+                                                    "texture": "#4"
                                                 }
                                    },
                          "name":  "rim_west"

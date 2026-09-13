@@ -3,9 +3,16 @@
   "package": "com.hwmods.overpressure.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "ArmBlockEntityAccessor"
+    "ArmBlockEntityAccessor",
+    "CurveCollisionMixin",
+    "CurveRaycastMixin",
+    "CurveInteractionMixin",
+    "CurveItemUseMixin",
+    "CurveBlockPlacementMixin",
+    "SectionPlacementCollisionMixin"
   ],
   "client": [
+    "SectionPickItemMixin",
     "ValueSettingsClientMixin",
     "GrindRailPlayerPoseMixin",
     "GrindRailPlayerRendererMixin",

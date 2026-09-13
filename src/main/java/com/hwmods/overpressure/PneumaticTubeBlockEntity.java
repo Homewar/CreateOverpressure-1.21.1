@@ -52,6 +52,29 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
     private static final Map<Level, Long> CLIENT_LAST_CLEANUP = new WeakHashMap<>();
     private static long ponderAnimationSequence = Long.MIN_VALUE;
     private MovingTubeItem movingItem;
+    private int tubeColor = 0xFFFFFF;
+    private boolean tubeGlowing;
+
+    public boolean isTubeGlowing() {
+        return tubeGlowing;
+    }
+
+    public void setTubeGlowing(boolean glowing) {
+        tubeGlowing = glowing;
+        setChanged();
+        requestModelDataUpdate();
+        notifyUpdate();
+    }
+
+    public int getTubeColor() {
+        return tubeColor;
+    }
+
+    public void setTubeColor(int color) {
+        tubeColor = color & 0xFFFFFF;
+        setChanged();
+        notifyUpdate();
+    }
 
     public record ClientRenderStep(int pathIndex, int nextOwnerPathIndex, float progress) {
     }
@@ -844,6 +867,8 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
     @Override
     protected void write(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
         super.write(tag, registries, clientPacket);
+        tag.putInt("TubeColor", tubeColor);
+        tag.putBoolean("TubeGlowing", tubeGlowing);
         MovingTubeItem localItem = movingItem;
         if (level != null && !level.isClientSide) {
             movingItem = TubeTransportManager.get(level).getSnapshot(worldPosition);
@@ -855,6 +880,14 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
     @Override
     protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
         super.read(tag, registries, clientPacket);
+        int previousColor = tubeColor;
+        boolean previousGlow = tubeGlowing;
+        tubeGlowing = tag.getBoolean("TubeGlowing");
+        tubeColor = tag.contains("TubeColor") ? tag.getInt("TubeColor") & 0xFFFFFF : 0xFFFFFF;
+        if (clientPacket && (previousColor != tubeColor || previousGlow != tubeGlowing) && level != null) {
+            requestModelDataUpdate();
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 16);
+        }
         movingItem = loadMovingItem(tag, registries);
         relocateLoadedMovingItem();
         if (level != null && !(level instanceof PonderLevel)) {
