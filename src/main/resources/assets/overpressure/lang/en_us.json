@@ -1,4 +1,5 @@
 {
+  "overpressure.notice.rebuild_curved_tubes": "[Overpressure] Due to changes in how the mod works, previously built curved tubes need to be placed again.",
   "overpressure.creative_pump.speed": "Pump speed (RPM)",
   "itemGroup.overpressure.overpressure": "Create: Overpressure",
   "block.overpressure.pneumatic_tube": "Pneumatic Tube",

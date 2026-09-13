@@ -1,4 +1,5 @@
 {
+  "overpressure.notice.rebuild_curved_tubes": "[Overpressure] Debido a los cambios en el funcionamiento del mod, debes volver a colocar los tubos curvos construidos anteriormente.",
   "itemGroup.overpressure.overpressure": "Create: Overpressure",
   "block.overpressure.pneumatic_tube": "Tubo neumático",
   "block.overpressure.curvature_pneumatic_tube": "Tubo neumático curvo",

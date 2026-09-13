@@ -1,4 +1,5 @@
 {
+  "overpressure.notice.rebuild_curved_tubes": "[Overpressure] Из-за изменений в логике работы мода ранее построенные изогнутые трубы нужно поставить заново.",
   "overpressure.creative_pump.speed": "Скорость насоса (об/мин)",
   "itemGroup.overpressure.overpressure": "Create: Overpressure",
   "block.overpressure.pneumatic_tube": "Пневматическая труба",
@@ -108,7 +109,7 @@
   "overpressure.planning.4": "контейнера — извлечение, В контейнер — загрузка.",
   "overpressure.planning.5": "Насос создаёт поток и определяет скорость перемещения предметов.",
   "overpressure.ponder.curvature_tube.header": "Изогнутые пневмотрубы",
-  "overpressure.ponder.curvature_tube.text_1": "????? ??????? ????????? ?????, ???????? ?? ?????????? ????, ????? ????? ? ????.",
+  "overpressure.ponder.curvature_tube.text_1": "Чтобы создать изогнутую трубу, кликните по начальному узлу, держа трубу в руке.",
   "overpressure.ponder.pneumatic_connection.header": "Пневмо-коннекторы",
   "overpressure.ponder.pneumatic_connection.text_1": "Пневмо-коннекторы связывают трубопровод с контейнерами.",
   "overpressure.ponder.pneumatic_connection.text_2": "В режиме извлечения коннектор направляет предметы из контейнера в трубу.",
