@@ -15,11 +15,13 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.level.ChunkEvent;
 import net.neoforged.neoforge.event.level.LevelEvent;
+import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 @EventBusSubscriber(modid = Overpressure.MODID)
 public final class TubeSections {
     private static final Map<Level, TubeSectionStorage> CLIENT = new WeakHashMap<>();
+    private static final Map<ServerLevel, Set<UUID>> PENDING_FLUID_REATTACH = new WeakHashMap<>();
     public static TubeSectionStorage get(Level level) {
         return level instanceof ServerLevel server ? TubeSectionStorage.get(server)
                 : CLIENT.computeIfAbsent(level, ignored -> new TubeSectionStorage());
@@ -114,13 +116,31 @@ public final class TubeSections {
                 var port = section.port(start);
                 BlockPos endpoint = BlockPos.containing(port.position().add(port.outward().scale(0.05)));
                 if ((endpoint.getX() >> 4) == chunk.x && (endpoint.getZ() >> 4) == chunk.z) {
-                    FluidTubeBridge.changed(level, section);
+                    // ChunkEvent.Load fires before the chunk's FULL future has
+                    // completed. Querying block states from inside this callback
+                    // can then wait for that same future forever during spawn
+                    // preparation. Queue the reattachment for an actual level
+                    // tick, which only runs after spawn preparation is complete.
+                    PENDING_FLUID_REATTACH.computeIfAbsent(level, ignored -> new LinkedHashSet<>())
+                            .add(section.id());
                     break;
                 }
             }
         }
     }
-    @SubscribeEvent public static void unload(LevelEvent.Unload event) { CLIENT.remove(event.getLevel()); }
+    @SubscribeEvent public static void tick(LevelTickEvent.Post event) {
+        if (!(event.getLevel() instanceof ServerLevel level)) return;
+        Set<UUID> pending = PENDING_FLUID_REATTACH.remove(level);
+        if (pending == null) return;
+        for (UUID id : pending) {
+            TubeSection section = get(level).get(id);
+            if (section != null && section.isFluid()) FluidTubeBridge.changed(level, section);
+        }
+    }
+    @SubscribeEvent public static void unload(LevelEvent.Unload event) {
+        CLIENT.remove(event.getLevel());
+        if (event.getLevel() instanceof ServerLevel level) PENDING_FLUID_REATTACH.remove(level);
+    }
     @SubscribeEvent public static void login(PlayerEvent.PlayerLoggedInEvent event) { syncPlayer(event); }
     @SubscribeEvent public static void dimension(PlayerEvent.PlayerChangedDimensionEvent event) { syncPlayer(event); }
     @SubscribeEvent public static void respawn(PlayerEvent.PlayerRespawnEvent event) { syncPlayer(event); }
