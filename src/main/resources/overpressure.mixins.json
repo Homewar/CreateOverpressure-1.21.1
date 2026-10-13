@@ -3,6 +3,10 @@
   "package": "com.hwmods.overpressure.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "FluidTubeConnectionMixin",
+    "FluidTubeSourceMixin",
+    "FluidTubePumpMixin",
+    "FluidTubeFlowMixin",
     "ArmBlockEntityAccessor",
     "CurveCollisionMixin",
     "CurveRaycastMixin",

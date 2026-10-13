@@ -13,6 +13,7 @@ import net.minecraft.world.phys.shapes.*;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.level.ChunkEvent;
 import net.neoforged.neoforge.event.level.LevelEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 
@@ -40,6 +41,7 @@ public final class TubeSections {
         return removed;
     }
     public static void changed(Level level, TubeSection section) {
+        if (section.isFluid()) { FluidTubeBridge.changed(level, section); return; }
         for (boolean start : new boolean[]{true, false}) {
             var port = section.port(start);
             BlockPos pos = BlockPos.containing(port.position().add(port.outward().scale(0.05)));
@@ -56,8 +58,12 @@ public final class TubeSections {
         }
     }
     public static List<TubeSection.Port> portsAt(Level level, Vec3 position, Vec3 outward) {
+        return portsAt(level, position, outward, false);
+    }
+    public static List<TubeSection.Port> portsAt(Level level, Vec3 position, Vec3 outward, boolean fluid) {
         List<TubeSection.Port> result = new ArrayList<>();
         for (TubeSection section : get(level).intersecting(new AABB(position, position).inflate(0.01))) {
+            if (section.isFluid() != fluid) continue;
             for (boolean start : new boolean[]{true, false}) {
                 var port = section.port(start);
                 if (position.distanceToSqr(port.position()) < 1.0E-8 && outward.dot(port.outward()) < -0.99) result.add(port);
@@ -97,6 +103,23 @@ public final class TubeSections {
         return best;
     }
     public record Hit(TubeSection section, Vec3 point, Direction face) {}
+    @SubscribeEvent public static void chunkLoaded(ChunkEvent.Load event) {
+        if (!(event.getLevel() instanceof ServerLevel level)) return;
+        var chunk = event.getChunk().getPos();
+        // Curve sections live in SavedData rather than as block entities, so
+        // their endpoints must be reattached whenever a chunk is loaded.
+        for (TubeSection section : get(level).sections()) {
+            if (!section.isFluid()) continue;
+            for (boolean start : new boolean[]{true, false}) {
+                var port = section.port(start);
+                BlockPos endpoint = BlockPos.containing(port.position().add(port.outward().scale(0.05)));
+                if ((endpoint.getX() >> 4) == chunk.x && (endpoint.getZ() >> 4) == chunk.z) {
+                    FluidTubeBridge.changed(level, section);
+                    break;
+                }
+            }
+        }
+    }
     @SubscribeEvent public static void unload(LevelEvent.Unload event) { CLIENT.remove(event.getLevel()); }
     @SubscribeEvent public static void login(PlayerEvent.PlayerLoggedInEvent event) { syncPlayer(event); }
     @SubscribeEvent public static void dimension(PlayerEvent.PlayerChangedDimensionEvent event) { syncPlayer(event); }

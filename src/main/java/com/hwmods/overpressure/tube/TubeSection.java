@@ -14,11 +14,16 @@ import net.minecraft.world.phys.Vec3;
 /** A complete tube section in world coordinates. It owns no block positions. */
 public final class TubeSection {
     private final UUID id;
+    private final boolean fluid;
     private final List<Span> spans;
     private final int materialCost;
     private final TubeSectionGeometry geometry;
 
     public TubeSection(UUID id, List<Span> spans, int materialCost) {
+        this(id, spans, materialCost, false);
+    }
+    public TubeSection(UUID id, List<Span> spans, int materialCost, boolean fluid) {
+        this.fluid = fluid;
         if (spans.isEmpty() || spans.size() > 512 || materialCost < 1) {
             throw new IllegalArgumentException("Invalid tube section size");
         }
@@ -33,6 +38,7 @@ public final class TubeSection {
         geometry = new TubeSectionGeometry(this.spans);
     }
 
+    public boolean isFluid() { return fluid; }
     public UUID id() { return id; }
     public List<Span> spans() { return spans; }
     public int materialCost() { return materialCost; }
@@ -45,12 +51,13 @@ public final class TubeSection {
     }
 
     public TubeSection withAppearance(int color, boolean glowing) {
-        return new TubeSection(id, spans.stream().map(span -> new Span(span.curve(), color, glowing)).toList(), materialCost);
+        return new TubeSection(id, spans.stream().map(span -> new Span(span.curve(), color, glowing)).toList(), materialCost, fluid);
     }
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putUUID("Id", id);
+        tag.putBoolean("Fluid", fluid);
         tag.putInt("MaterialCost", materialCost);
         ListTag entries = new ListTag();
         for (Span span : spans) {
@@ -76,7 +83,7 @@ public final class TubeSection {
             spans.add(new Span(new CubicBezier(readPoint(entry, "P0"), readPoint(entry, "P1"),
                     readPoint(entry, "P2"), readPoint(entry, "P3")), entry.getInt("Color"), entry.getBoolean("Glowing")));
         }
-        return new TubeSection(tag.getUUID("Id"), spans, tag.getInt("MaterialCost"));
+        return new TubeSection(tag.getUUID("Id"), spans, tag.getInt("MaterialCost"), tag.getBoolean("Fluid"));
     }
 
     private static void writePoint(CompoundTag tag, String key, Vec3 point) {

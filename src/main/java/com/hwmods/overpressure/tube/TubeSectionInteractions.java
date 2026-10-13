@@ -35,7 +35,7 @@ public final class TubeSectionInteractions {
                     || level.getGameRules().getBoolean(net.minecraft.world.level.GameRules.RULE_DOBLOCKDROPS))) {
                 int count = removed.materialCost();
                 while (count > 0) {
-                    ItemStack refund = new ItemStack(ModBlocks.PNEUMATIC_TUBE_ITEM.get());
+                    ItemStack refund = new ItemStack(removed.isFluid() ? com.simibubi.create.AllBlocks.FLUID_PIPE.asItem() : ModBlocks.PNEUMATIC_TUBE_ITEM.get());
                     int amount = Math.min(refund.getMaxStackSize(), count);
                     refund.setCount(amount);
                     if (!attack) player.getInventory().placeItemBackInInventory(refund);
@@ -57,7 +57,9 @@ public final class TubeSectionInteractions {
             if (paint(player, id, color, held.is(Items.GLOW_INK_SAC)) && !player.getAbilities().instabuild) held.shrink(1);
             return;
         }
-        if (held.getItem() instanceof PneumaticTubeBlockItem tube && !player.isShiftKeyDown()) {
+        var tube = PneumaticTubeBlockItem.planner(held);
+        if (tube != null && !player.isShiftKeyDown()) {
+            if (tube.isFluid() != hit.section().isFluid()) return;
             if (tube.getSelectedStart(level, player) != null) { tube.use(level, player, hand); return; }
             boolean start = hit.point().distanceToSqr(hit.section().port(true).position())
                     < hit.point().distanceToSqr(hit.section().port(false).position());

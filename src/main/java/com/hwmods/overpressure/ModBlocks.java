@@ -41,6 +41,8 @@ public class ModBlocks {
     public static final DeferredBlock<CapsulePortBlock> CAPSULE_PORT = BLOCKS.register("capsule_port", () -> new CapsulePortBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.8f).sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<GrindRailBlock> GRIND_RAIL = BLOCKS.register("grind_rail", () -> new GrindRailBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.8f).sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<GrindRailSupportBlock> GRIND_RAIL_SUPPORT = BLOCKS.register("grind_rail_support", () -> new GrindRailSupportBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.8f).sound(SoundType.METAL).noOcclusion()));
+    public static final DeferredItem<PneumaticTubeBlockItem> FLUID_CURVE_ITEM = ITEMS.register("curved_fluid_tube",
+            () -> new PneumaticTubeBlockItem(AllBlocks.FLUID_PIPE.get(), new Item.Properties(), true));
     public static final DeferredItem<Item> PNEUMATIC_TUBE_ITEM = ITEMS.register("pneumatic_tube", () -> new PneumaticTubeBlockItem(PNEUMATIC_TUBE.get(), new Item.Properties()));
     public static final DeferredItem<Item> PNEUMATIC_CONNECTION_ITEM = ITEMS.register("pneumatic_connection", () -> new BlockItem(PNEUMATIC_CONNECTION.get(), new Item.Properties()));
     public static final DeferredItem<Item> ITEM_PUMP_ITEM = ITEMS.register("item_pump", () -> new BlockItem(ITEM_PUMP.get(), new Item.Properties()));
@@ -60,6 +62,7 @@ public class ModBlocks {
                     .withTabsBefore(AllCreativeModeTabs.PALETTES_CREATIVE_TAB.getKey())
                     .displayItems((parameters, output) -> {
                         output.accept(PNEUMATIC_TUBE_ITEM.get());
+                        output.accept(FLUID_CURVE_ITEM.get());
                         output.accept(PNEUMATIC_CONNECTION_ITEM.get());
                         output.accept(ITEM_PUMP_ITEM.get());
                         output.accept(CREATIVE_ITEM_PUMP_ITEM.get());

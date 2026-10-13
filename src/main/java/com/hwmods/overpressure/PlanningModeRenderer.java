@@ -57,7 +57,7 @@ public class PlanningModeRenderer {
     }
 
     private static ItemStack tubeStack(Player player) {
-        return player.getMainHandItem().getItem() instanceof PneumaticTubeBlockItem
+        return PneumaticTubeBlockItem.planner(player.getMainHandItem()) != null
                 ? player.getMainHandItem() : player.getOffhandItem();
     }
 
@@ -84,7 +84,8 @@ public class PlanningModeRenderer {
         Minecraft minecraft = Minecraft.getInstance();
         Player player = minecraft.player;
 
-        if (player == null || !(tubeStack(player).getItem() instanceof PneumaticTubeBlockItem tubeItem)) {
+        var tubeItem = player == null ? null : PneumaticTubeBlockItem.planner(tubeStack(player));
+        if (tubeItem == null) {
             return;
         }
         Level level = player.level();
@@ -297,8 +298,8 @@ public class PlanningModeRenderer {
         Minecraft minecraft = Minecraft.getInstance();
         Player player = minecraft.player;
 
-        if (player == null || minecraft.options.hideGui
-                || !(tubeStack(player).getItem() instanceof PneumaticTubeBlockItem tubeItem)) {
+        var tubeItem = player == null ? null : PneumaticTubeBlockItem.planner(tubeStack(player));
+        if (tubeItem == null || minecraft.options.hideGui) {
             return;
         }
         PneumaticTubeBlockItem.CurveStart start = tubeItem.getSelectedStart(player.level(), player);

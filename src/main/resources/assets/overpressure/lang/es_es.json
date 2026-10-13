@@ -1,4 +1,6 @@
 {
+  "item.overpressure.curved_fluid_tube": "Tubo curvo de fluidos",
+  "overpressure.fluid_tube.hint": "Haz clic derecho en un nodo de fluidos para empezar. Rueda: longitud; Mayús + clic derecho: tubería normal.",
   "itemGroup.overpressure.overpressure": "Create: Overpressure",
   "block.overpressure.pneumatic_tube": "Tubo neumático",
   "block.overpressure.curvature_pneumatic_tube": "Tubo neumático curvo",

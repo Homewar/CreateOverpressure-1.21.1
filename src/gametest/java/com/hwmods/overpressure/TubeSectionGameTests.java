@@ -20,6 +20,16 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 @PrefixGameTestTemplate(false)
 public class TubeSectionGameTests {
     @GameTest(template = "routing_empty")
+    public static void degeneratePreviewCurveIsRejectedWithoutThrowing(GameTestHelper helper) {
+        Vec3 point = new Vec3(0.5, 0.5, 0.5);
+        var plan = List.of(new PneumaticTubeBlockItem.PlanTube(BlockPos.ZERO,
+                net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), point, point, point, point));
+        helper.assertTrue(com.hwmods.overpressure.tube.TubeSectionPlacement.fromPlan(plan) == null,
+                "A zero-length preview must be rejected instead of crashing the renderer");
+        helper.succeed();
+    }
+
+    @GameTest(template = "routing_empty")
     public static void cargoCompletionRendersTheLastBlockBeforeDisappearing(GameTestHelper helper) {
         var level = helper.getLevel();
         UUID id = UUID.randomUUID(), otherId = UUID.randomUUID();

@@ -1,4 +1,6 @@
 {
+  "item.overpressure.curved_fluid_tube": "Curved Fluid Tube",
+  "overpressure.fluid_tube.hint": "Right-click a fluid node to start routing. Scroll to adjust length; Shift + right-click places a normal pipe.",
   "overpressure.creative_pump.speed": "Pump speed (RPM)",
   "itemGroup.overpressure.overpressure": "Create: Overpressure",
   "block.overpressure.pneumatic_tube": "Pneumatic Tube",

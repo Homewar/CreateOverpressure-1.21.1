@@ -49,12 +49,12 @@ public final class TubeSectionPainting {
                 for (boolean first : new boolean[]{true, false}) {
                     if (first ? part.index != 0 : part.index != section.spans().size() - 1) continue;
                     var port = section.port(first);
-                    for (var next : TubeSections.portsAt(level, port.position(), port.outward())) addPort(level, queue, next);
-                    queue.add(BlockPos.containing(port.position().add(port.outward().scale(0.05))));
+                    for (var next : TubeSections.portsAt(level, port.position(), port.outward(), section.isFluid())) addPort(level, queue, next);
+                    if (!section.isFluid()) queue.add(BlockPos.containing(port.position().add(port.outward().scale(0.05))));
                 }
             }
         }
-        changedSections.forEach((id, spans) -> TubeSections.put(level, new TubeSection(id, spans, TubeSections.get(level).get(id).materialCost())));
+        changedSections.forEach((id, spans) -> TubeSections.put(level, new TubeSection(id, spans, TubeSections.get(level).get(id).materialCost(), TubeSections.get(level).get(id).isFluid())));
         return changed;
     }
     private static void addPort(Level level, ArrayDeque<Object> queue, TubeSection.Port port) {

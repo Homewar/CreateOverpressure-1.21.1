@@ -36,9 +36,10 @@ public class PlanningMode {
         if (player == null || minecraft.screen != null || event.getScrollDeltaY() == 0.0) {
             return;
         }
-        var stack = player.getMainHandItem().getItem() instanceof PneumaticTubeBlockItem
+        var stack = PneumaticTubeBlockItem.planner(player.getMainHandItem()) != null
                 ? player.getMainHandItem() : player.getOffhandItem();
-        if (!(stack.getItem() instanceof PneumaticTubeBlockItem item)) {
+        var item = PneumaticTubeBlockItem.planner(stack);
+        if (item == null) {
             scrollRemainder = 0.0;
             scrollStart = null;
             return;

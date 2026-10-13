@@ -16,8 +16,13 @@ public final class TubeSectionPlacement {
         for (PlanTube tube : tubes) {
             if (tube.curveP0() == null) continue;
             Vec3 origin = Vec3.atLowerCornerOf(tube.pos());
-            spans.add(new TubeSection.Span(new CubicBezier(origin.add(tube.curveP0()), origin.add(tube.curveP1()),
-                    origin.add(tube.curveP2()), origin.add(tube.curveP3())), 0xFFFFFF, false));
+            CubicBezier curve = new CubicBezier(origin.add(tube.curveP0()), origin.add(tube.curveP1()),
+                    origin.add(tube.curveP2()), origin.add(tube.curveP3()));
+            // A preview can temporarily target its own anchor. It has no
+            // direction at either end and therefore cannot become a section.
+            if (curve.derivativeAt(0).lengthSqr() < 1.0E-12 || curve.derivativeAt(1).lengthSqr() < 1.0E-12)
+                return null;
+            spans.add(new TubeSection.Span(curve, 0xFFFFFF, false));
         }
         return spans.isEmpty() ? null : new TubeSection(UUID.randomUUID(), spans, spans.size());
     }
@@ -49,7 +54,7 @@ public final class TubeSectionPlacement {
                 // Collars of two joining sections share a small region at their seam.
                 boolean seam = false;
                 for (boolean first : new boolean[]{true, false}) for (boolean second : new boolean[]{true, false}) {
-                    if (section.port(first).connectsTo(other.port(second))
+                    if (section.isFluid() == other.isFluid() && section.port(first).connectsTo(other.port(second))
                             && a.getCenter().distanceTo(section.port(first).position()) < 0.55
                             && b.getCenter().distanceTo(section.port(first).position()) < 0.55) seam = true;
                 }

@@ -26,9 +26,10 @@ public record TubePlacementReachPayload(ResourceLocation dimension, BlockPos anc
             if (!player.level().dimension().location().equals(payload.dimension())) {
                 return;
             }
-            var stack = player.getMainHandItem().getItem() instanceof PneumaticTubeBlockItem
+            var stack = PneumaticTubeBlockItem.planner(player.getMainHandItem()) != null
                     ? player.getMainHandItem() : player.getOffhandItem();
-            if (stack.getItem() instanceof PneumaticTubeBlockItem item) {
+            var item = PneumaticTubeBlockItem.planner(stack);
+            if (item != null) {
                 var start = item.getSelectedStart(player.level(), player);
                 if (start != null && start.pos().equals(payload.anchor())) {
                     item.setPlacementReach(player, payload.reach());

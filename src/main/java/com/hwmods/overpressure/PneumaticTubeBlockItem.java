@@ -63,14 +63,44 @@ public class PneumaticTubeBlockItem extends BlockItem {
     private static final double MIN_CURVATURE_RADIUS = 0.55;
     private static final double MAX_CURVE_SEGMENT_TURN_DEGREES = 60.0;
     private final int placementHelperId;
+    private final boolean fluid;
+    public boolean isFluid() { return fluid; }
+    public static PneumaticTubeBlockItem planner(ItemStack stack) {
+        if (stack.getItem() instanceof PneumaticTubeBlockItem item) return item;
+        if (!stack.is(com.simibubi.create.AllBlocks.FLUID_PIPE.asItem())) return null;
+        return ModBlocks.FLUID_CURVE_ITEM.get();
+    }
 
     public PneumaticTubeBlockItem(Block block, Properties properties) {
+        this(block, properties, false);
+    }
+    public PneumaticTubeBlockItem(Block block, Properties properties, boolean fluid) {
         super(block, properties);
+        this.fluid = fluid;
         placementHelperId = PlacementHelpers.register(new StraightTubePlacementHelper());
     }
 
     @Override
+    public void registerBlocks(Map<Block, net.minecraft.world.item.Item> items, net.minecraft.world.item.Item item) {
+        // The alternate building item must not replace Create's normal copper pipe item.
+        if (!fluid) super.registerBlocks(items, item);
+    }
+    @Override
+    public String getDescriptionId() {
+        return fluid ? "item.overpressure.curved_fluid_tube" : super.getDescriptionId();
+    }
+
+    @Override
     public InteractionResult onItemUseFirst(ItemStack stack, UseOnContext context) {
+        // The curved-fluid item uses Create's FluidPipeBlock as its backing
+        // block.  Consequently the generic straight-tube placement helper
+        // also matches a copper pipe and would consume this first-use hook by
+        // extending it as a normal pipe, before useOn() can select the curve
+        // endpoint.  Route the dedicated item directly through its curve
+        // interaction; ordinary copper pipes are handled by FluidTubeInput.
+        if (fluid) {
+            return useOn(context);
+        }
         Player player = context.getPlayer();
         if (player == null) {
             return super.onItemUseFirst(stack, context);
@@ -113,7 +143,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
             return canPlaceSingleTubeInWater(state)
                     ? placeSingleTubeInWater(context, player, pos) : super.useOn(context);
         }
-        CurveStart selected = getDeviderCurveStart(pos, state, face, context.getClickLocation());
+        CurveStart selected = fluid ? null : getDeviderCurveStart(pos, state, face, context.getClickLocation());
         if (selected == null && canStartCurveFrom(level, pos, state, face)) {
             selected = new CurveStart(pos, face);
         }
@@ -250,6 +280,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
             return false;
         }
         var independent = com.hwmods.overpressure.tube.TubeSectionPlacement.fromPlan(plan.tubes());
+        if (fluid && independent != null) independent = new com.hwmods.overpressure.tube.TubeSection(independent.id(), independent.spans(), independent.materialCost(), true);
         if (independent != null) {
             if (!com.hwmods.overpressure.tube.TubeSectionPlacement.canPlace(level, independent, player)) {
                 player.displayClientMessage(Component.translatable("overpressure.routing.error.blocked"), true);
@@ -305,7 +336,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
     }
 
     private List<PlacedTube> buildPlacedTubes(CurveStart start, BlockPos startPos, CurveEnd end, BlockPos endPos) {
-        if (startPos.equals(endPos) && !start.isDeviderOutput()
+        if (!fluid && startPos.equals(endPos) && !start.isDeviderOutput()
                 && start.direction == end.direction.getOpposite()) {
             return List.of(new PlacedTube(startPos,
                     createTubeState(false, start.direction.getOpposite(), start.direction), null));
@@ -327,6 +358,8 @@ public class PneumaticTubeBlockItem extends BlockItem {
 
         Direction.Axis fixedAxis = getCurvePlaneFixedAxis(start, startPos, endPos, secondLegDirection);
 
+        if (fixedAxis == null && fluid && isStraight(startPos, endPos))
+            fixedAxis = firstLegDirection.getAxis() == Direction.Axis.Y ? Direction.Axis.X : Direction.Axis.Y;
         if (fixedAxis == null) {
             return List.of();
         }
@@ -452,6 +485,16 @@ public class PneumaticTubeBlockItem extends BlockItem {
     }
 
     private BlockState createTubeState(boolean curvature, Direction... connections) {
+        if (fluid && !curvature) {
+            BlockState state = com.simibubi.create.AllBlocks.FLUID_PIPE.getDefaultState();
+            for (Direction direction : Direction.values()) {
+                state = state.setValue(net.minecraft.world.level.block.PipeBlock.PROPERTY_BY_DIRECTION.get(direction), false);
+            }
+            for (Direction connection : connections) {
+                state = state.setValue(net.minecraft.world.level.block.PipeBlock.PROPERTY_BY_DIRECTION.get(connection), true);
+            }
+            return state;
+        }
         BlockState state = (curvature ? ModBlocks.CURVATURE_PNEUMATIC_TUBE.get() : ModBlocks.PNEUMATIC_TUBE.get())
                 .defaultBlockState();
 
@@ -599,6 +642,8 @@ public class PneumaticTubeBlockItem extends BlockItem {
                 ? Math.max(0.35, distance * 0.35)
                 : Math.max(1.5, distance * 0.45);
 
+        if (fluid && incoming.dot(outgoing) > 0.999 && p3.subtract(p0).cross(incoming).lengthSqr() < 1.0E-8)
+            handleLength = distance / 3;
         Vec3 p1 = p0.add(incoming.scale(handleLength));
         Vec3 p2 = p3.subtract(outgoing.scale(handleLength));
 
@@ -644,6 +689,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
     }
 
     private boolean canStartCurveFrom(Level level, BlockPos pos, BlockState state, Direction direction) {
+        if (fluid) return com.hwmods.overpressure.tube.FluidTubeBridge.canConnect(level, pos, direction);
         if (state.getBlock() instanceof PneumaticConnectionBlock connection) {
             return connection.getTubeDirection(level, pos, state) == direction;
         }
@@ -953,7 +999,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
 
     public PlacementPreview previewPlacement(Level level, Player player, CurveStart start) {
         var sectionHit = com.hwmods.overpressure.tube.TubeSectionInteractions.hit(player, TubePlacementTargeting.MAX_DISTANCE);
-        if (sectionHit != null && !sectionHit.section().id().equals(start.sectionId())) {
+        if (sectionHit != null && sectionHit.section().isFluid() == fluid && !sectionHit.section().id().equals(start.sectionId())) {
             boolean firstEnd = sectionHit.point().distanceToSqr(sectionHit.section().port(true).position())
                     < sectionHit.point().distanceToSqr(sectionHit.section().port(false).position());
             var port = sectionHit.section().port(firstEnd);
@@ -967,7 +1013,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
         if (hit.getType() == HitResult.Type.BLOCK && !hit.getBlockPos().equals(start.pos())) {
             BlockPos pos = hit.getBlockPos();
             BlockState state = level.getBlockState(pos);
-            CurveStart divider = getDeviderCurveStart(pos, state, hit.getDirection(), hit.getLocation());
+            CurveStart divider = fluid ? null : getDeviderCurveStart(pos, state, hit.getDirection(), hit.getLocation());
             if (divider != null && !start.isDeviderPort()) {
                 return new PlacementPreview(planSection(level, divider, new CurveEnd(start.pos(), start.direction())),
                         pos, hit.getDirection().getOpposite(), true);
@@ -1006,7 +1052,12 @@ public class PneumaticTubeBlockItem extends BlockItem {
                 end.outgoing().getOpposite());
         PlanResult section = planSection(level, start, anchor);
         List<PlanTube> tubes = new ArrayList<>(section.tubes());
-        PlanTube tip = new PlanTube(end.pos(), createTubeState(false, end.outgoing().getOpposite()), null, null, null, null);
+        // Item tubes have their own rim state for an open end. Create's fluid pipe
+        // has no equivalent property, so keep its outward arm to render the rim.
+        BlockState tipState = fluid
+                ? createTubeState(false, end.outgoing().getOpposite(), end.outgoing())
+                : createTubeState(false, end.outgoing().getOpposite());
+        PlanTube tip = new PlanTube(end.pos(), tipState, null, null, null, null);
         if (straight && !tubes.isEmpty() && tubes.getLast().pos().equals(end.pos())) {
             tubes.set(tubes.size() - 1, tip);
         } else {
@@ -1051,6 +1102,12 @@ public class PneumaticTubeBlockItem extends BlockItem {
         BlockPos startPos = getStartTubePos(start);
         BlockPos endPos = end.pos.relative(end.direction);
         String error = null;
+        // A free-end ray can resolve to the anchor's own cell. Such a route
+        // would have zero length, so it is invalid rather than a curve with a
+        // zero tangent (which used to crash the client preview renderer).
+        if (startPos.equals(endPos)) {
+            return new PlanResult(List.of(), "overpressure.routing.error.direction");
+        }
         if (startPos.distSqr(endPos) > TubePlacementTargeting.MAX_DISTANCE * TubePlacementTargeting.MAX_DISTANCE) {
             return invalidSectionPreview(start, startPos, end, endPos, "overpressure.routing.error.long");
         }
@@ -1089,7 +1146,13 @@ public class PneumaticTubeBlockItem extends BlockItem {
                     tube.bezier == null ? null : tube.bezier.p2(),
                     tube.bezier == null ? null : tube.bezier.p3()));
         }
+        if (plan.stream().anyMatch(tube -> tube.curveP0() != null
+                && (tube.curveP1().subtract(tube.curveP0()).lengthSqr() < 1.0E-12
+                || tube.curveP3().subtract(tube.curveP2()).lengthSqr() < 1.0E-12))) {
+            return new PlanResult(plan, "overpressure.routing.error.direction");
+        }
         var independent = com.hwmods.overpressure.tube.TubeSectionPlacement.fromPlan(plan);
+        if (fluid && independent != null) independent = new com.hwmods.overpressure.tube.TubeSection(independent.id(), independent.spans(), independent.materialCost(), true);
         if (independent != null && !com.hwmods.overpressure.tube.TubeSectionPlacement.canPlace(level, independent, null)) {
             error = "overpressure.routing.error.blocked";
         }
@@ -1118,7 +1181,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
     public boolean isCurveStartValid(Level level, CurveStart start) {
         if (start.sectionId() != null) {
             var section = com.hwmods.overpressure.tube.TubeSections.get(level).get(start.sectionId());
-            return section != null && section.port(start.sectionStart()).direction() == start.direction();
+            return section != null && section.isFluid() == fluid && section.port(start.sectionStart()).direction() == start.direction();
         }
         if (start.isDeviderPort()) {
             BlockState state = level.getBlockState(start.pos);
@@ -1150,7 +1213,7 @@ public class PneumaticTubeBlockItem extends BlockItem {
             Direction clickedFace,
             Vec3 clickLocation
     ) {
-        CurveStart deviderEnd = getDeviderCurveStart(
+        CurveStart deviderEnd = fluid ? null : getDeviderCurveStart(
                 clickedPos,
                 level.getBlockState(clickedPos),
                 clickedFace,

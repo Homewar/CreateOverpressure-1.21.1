@@ -19,7 +19,8 @@ public abstract class SectionPickItemMixin {
         if (mc.player == null || mc.gameMode == null
                 || TubeSectionInteractions.hit(mc.player, mc.player.blockInteractionRange()) == null) return;
         callback.cancel();
-        ItemStack stack = new ItemStack(ModBlocks.PNEUMATIC_TUBE_ITEM.get());
+        var hit = TubeSectionInteractions.hit(mc.player, mc.player.blockInteractionRange());
+        ItemStack stack = new ItemStack(hit.section().isFluid() ? com.simibubi.create.AllBlocks.FLUID_PIPE.asItem() : ModBlocks.PNEUMATIC_TUBE_ITEM.get());
         Inventory inventory = mc.player.getInventory();
         if (mc.player.getAbilities().instabuild) {
             inventory.setPickedItem(stack);

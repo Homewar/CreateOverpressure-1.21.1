@@ -1,4 +1,6 @@
 {
+  "item.overpressure.curved_fluid_tube": "Изогнутая жидкостная труба",
+  "overpressure.fluid_tube.hint": "ПКМ по жидкостному узлу — начать прокладку. Колёсико — длина; Shift + ПКМ — обычная труба.",
   "overpressure.creative_pump.speed": "Скорость насоса (об/мин)",
   "itemGroup.overpressure.overpressure": "Create: Overpressure",
   "block.overpressure.pneumatic_tube": "Пневматическая труба",
