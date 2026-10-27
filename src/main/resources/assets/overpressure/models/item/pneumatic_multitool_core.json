@@ -1,0 +1,13 @@
+{
+	"parent": "overpressure:item/pneumatic_multitool_core_base",
+	"overrides": [
+		{
+			"predicate": {"custom_model_data": 1},
+			"model": "overpressure:item/pneumatic_multitool_with_drill"
+		},
+		{
+			"predicate": {"custom_model_data": 2},
+			"model": "overpressure:item/pneumatic_multitool_with_saw"
+		}
+	]
+}

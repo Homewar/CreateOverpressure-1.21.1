@@ -2,6 +2,7 @@ package com.hwmods.overpressure.tube;
 
 import java.util.*;
 import com.hwmods.overpressure.Overpressure;
+import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.*;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -30,14 +31,38 @@ public record SectionCargoPayload(ResourceLocation dimension, CompoundTag data) 
         tag.put("Cargo", entries);
         PacketDistributor.sendToPlayersInDimension(level, new SectionCargoPayload(level.dimension().location(), tag));
     }
+    public static void start(ServerLevel level, SectionTransport.Cargo cargo) {
+        if (level.players().isEmpty()) return;
+        CompoundTag tag = new CompoundTag();
+        // The renderer intentionally runs a few ticks behind for smooth packet
+        // interpolation. Backdate the zero-distance sample by the same amount so
+        // a newly dispatched capsule starts moving immediately at the route entry.
+        tag.putLong("Tick", level.getGameTime() - CargoAnimation.RENDER_DELAY_TICKS);
+        tag.putBoolean("Partial", true);
+        ListTag entries = new ListTag();
+        entries.add(snapshot(level, cargo, cargo.stack,
+                SectionTransport.position(level, cargo.route.get(cargo.index), cargo.distance)));
+        tag.put("Cargo", entries);
+        PacketDistributor.sendToPlayersInDimension(level,
+                new SectionCargoPayload(level.dimension().location(), tag));
+    }
     private static CompoundTag snapshot(ServerLevel level, SectionTransport.Cargo c, ItemStack stack, Vec3 position) {
         CompoundTag entry = new CompoundTag();
-        if (c.route.get(c.index).location() instanceof com.hwmods.overpressure.transport.TransportLocation.Section ref) {
+        SectionTransport.Hop hop = c.route.get(c.index);
+        double pathLength = SectionTransport.length(level, hop);
+        entry.putDouble("PathDistance", c.distance);
+        entry.putDouble("PathLength", pathLength);
+        SectionTransport.point(entry, "PathEntry", hop.entry());
+        SectionTransport.point(entry, "PathExit", hop.exit());
+        if (hop.location() instanceof com.hwmods.overpressure.transport.TransportLocation.Section ref) {
             var section = TubeSections.get(level).get(ref.id());
             if (section != null) {
                 entry.putUUID("Section", ref.id());
+                entry.putBoolean("SectionStart", ref.start());
                 entry.putDouble("Distance", ref.start() ? c.distance : section.geometry().length() - c.distance);
             }
+        } else if (hop.location() instanceof com.hwmods.overpressure.transport.TransportLocation.Block block) {
+            entry.putLong("Block", block.pos().asLong());
         }
         entry.putUUID("Id", c.id); entry.put("Stack", stack.save(level.registryAccess()));
         SectionTransport.point(entry, "Position", position);
@@ -63,9 +88,20 @@ public record SectionCargoPayload(ResourceLocation dimension, CompoundTag data) 
         for (int i = 0; i < entries.size(); i++) {
             var entry = entries.getCompound(i); UUID id = entry.getUUID("Id");
             Vec3 point = SectionTransport.point(entry, "Position");
+            CargoAnimation.Path path = null;
+            if (entry.hasUUID("Section")) {
+                path = new CargoAnimation.Path(entry.getUUID("Section"), entry.getBoolean("SectionStart"), null,
+                        SectionTransport.point(entry, "PathEntry"), SectionTransport.point(entry, "PathExit"),
+                        entry.getDouble("PathLength"));
+            } else if (entry.contains("Block", Tag.TAG_LONG)) {
+                path = new CargoAnimation.Path(null, false, BlockPos.of(entry.getLong("Block")),
+                        SectionTransport.point(entry, "PathEntry"), SectionTransport.point(entry, "PathExit"),
+                        entry.getDouble("PathLength"));
+            }
             CargoAnimation animation = old.containsKey(id) ? old.get(id).animation() : new CargoAnimation();
             animation.add(new CargoAnimation.Sample(tick, point, SectionTransport.point(entry, "Direction"),
-                    entry.hasUUID("Section") ? entry.getUUID("Section") : null, entry.getDouble("Distance")));
+                    entry.hasUUID("Section") ? entry.getUUID("Section") : null, entry.getDouble("Distance"),
+                    path, entry.getDouble("PathDistance")));
             if (entry.getBoolean("Finished")) animation.removed(tick);
             next.put(id, new Visual(ItemStack.parseOptional(level.registryAccess(), entry.getCompound("Stack")), animation));
         }

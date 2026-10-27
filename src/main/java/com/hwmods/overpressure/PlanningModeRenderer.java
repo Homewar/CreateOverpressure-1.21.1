@@ -62,7 +62,7 @@ public class PlanningModeRenderer {
     }
 
     private static PneumaticTubeBlockItem.PlacementPreview getPreview(
-            Player player, PneumaticTubeBlockItem tubeItem, PneumaticTubeBlockItem.CurveStart start
+            Player player, PneumaticTubeBlockItem.Planner tubeItem, PneumaticTubeBlockItem.CurveStart start
     ) {
         if (preview == null || previewLevel != player.level() || previewPlayer != player
                 || previewTick != player.level().getGameTime() || !start.equals(previewStart)) {

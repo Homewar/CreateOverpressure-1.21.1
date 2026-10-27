@@ -18,13 +18,17 @@ import net.neoforged.neoforge.gametest.*;
 @GameTestHolder(Overpressure.MODID)
 @PrefixGameTestTemplate(false)
 public class FluidTubeGameTests {
+    private static PneumaticTubeBlockItem.Planner fluidPlanner() {
+        return Objects.requireNonNull(PneumaticTubeBlockItem.planner(AllBlocks.FLUID_PIPE.asStack()));
+    }
+
     private static TubeSection curve(BlockPos from, BlockPos to) {
         Vec3 a = Vec3.atCenterOf(from).add(0.5, 0, 0), b = Vec3.atCenterOf(to).add(0, 0, -0.5);
         return new TubeSection(UUID.randomUUID(), List.of(new TubeSection.Span(
                 new CubicBezier(a, a.add(3, 0, 0), b.add(0, 0, -3), b), 0xFFFFFF, false)), 10, true);
     }
     @GameTest(template = "routing_empty", timeoutTicks = 40)
-    public static void curvedFluidItemSelectsCopperPipeInsteadOfExtendingIt(GameTestHelper helper) {
+    public static void copperPipeSelectsCurveStartInsteadOfExtendingIt(GameTestHelper helper) {
         var level = helper.getLevel();
         BlockPos pipePos = helper.absolutePos(new BlockPos(4, 5, 4));
         var state = AllBlocks.FLUID_PIPE.getDefaultState();
@@ -35,18 +39,19 @@ public class FluidTubeGameTests {
 
         var player = new net.neoforged.neoforge.common.util.FakePlayer(level,
                 new com.mojang.authlib.GameProfile(UUID.randomUUID(), "FluidCurveClick"));
-        var stack = ModBlocks.FLUID_CURVE_ITEM.get().getDefaultInstance();
+        var stack = AllBlocks.FLUID_PIPE.asStack();
+        var planner = fluidPlanner();
         player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, stack);
         var context = new net.minecraft.world.item.context.UseOnContext(player,
                 net.minecraft.world.InteractionHand.MAIN_HAND,
                 new net.minecraft.world.phys.BlockHitResult(Vec3.atCenterOf(pipePos).add(0.5, 0, 0),
                         Direction.EAST, pipePos, false));
 
-        var result = ModBlocks.FLUID_CURVE_ITEM.get().onItemUseFirst(stack, context);
-        var selected = ModBlocks.FLUID_CURVE_ITEM.get().getSelectedStart(level, player);
+        var result = planner.useOn(context);
+        var selected = planner.getSelectedStart(level, player);
         helper.assertTrue(result.consumesAction() && selected != null
                         && selected.pos().equals(pipePos) && selected.direction() == Direction.EAST,
-                "The curved-fluid item must select the clicked copper-pipe face");
+                "The copper pipe must select the clicked copper-pipe face for curved routing");
         helper.assertTrue(level.getBlockState(pipePos.east()).isAir(),
                 "Selecting a curve endpoint must not place another straight copper pipe");
         helper.succeed();
@@ -59,7 +64,7 @@ public class FluidTubeGameTests {
         level.setBlock(start, AllBlocks.FLUID_PIPE.getDefaultState(), 3);
         level.setBlock(target, AllBlocks.FLUID_TANK.getDefaultState(), 3);
 
-        var planner = ModBlocks.FLUID_CURVE_ITEM.get();
+        var planner = fluidPlanner();
         var plan = planner.planClientSection(level, new PneumaticTubeBlockItem.CurveStart(start, Direction.EAST),
                 target, Direction.WEST, Vec3.atCenterOf(target).add(-0.5, 0, 0));
 
@@ -87,8 +92,8 @@ public class FluidTubeGameTests {
         player.setPos(eye.x, eye.y - player.getEyeHeight(), eye.z);
         player.setYRot(-90);
         player.setXRot(0);
-        var planner = ModBlocks.FLUID_CURVE_ITEM.get();
-        var stack = planner.getDefaultInstance();
+        var planner = fluidPlanner();
+        var stack = AllBlocks.FLUID_PIPE.asStack();
         player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, stack);
         planner.useOn(new net.minecraft.world.item.context.UseOnContext(player,
                 net.minecraft.world.InteractionHand.MAIN_HAND,
@@ -279,7 +284,7 @@ public class FluidTubeGameTests {
         // copper pipes; a player does not preconfigure those block states.
         level.setBlock(sourcePipe, pipe.setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.WEST, true), 3);
         level.setBlock(targetPipe, pipe.setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.SOUTH, true), 3);
-        var planner = ModBlocks.FLUID_CURVE_ITEM.get();
+        var planner = fluidPlanner();
         var plan = planner.planClientSection(level, new PneumaticTubeBlockItem.CurveStart(sourcePipe, Direction.EAST),
                 targetPipe, Direction.NORTH, Vec3.atCenterOf(targetPipe).add(0, 0, -0.5));
         helper.assertTrue(plan.valid(), "The route produced by the copper-pipe item must be valid: " + plan.errorMessage());

@@ -178,6 +178,27 @@ public class TubeSectionGameTests {
     }
 
     @GameTest(template = "routing_empty")
+    public static void cargoAnimationFollowsBlockTurnInsteadOfItsChord(GameTestHelper helper) {
+        BlockPos block = new BlockPos(4, 5, 6);
+        Vec3 entry = new Vec3(4, 5.5, 6.5);
+        Vec3 center = Vec3.atCenterOf(block);
+        Vec3 exit = new Vec3(4.5, 5.5, 7);
+        var path = new com.hwmods.overpressure.tube.CargoAnimation.Path(
+                null, false, block, entry, exit, 1.0);
+        var animation = new com.hwmods.overpressure.tube.CargoAnimation();
+        animation.add(new com.hwmods.overpressure.tube.CargoAnimation.Sample(
+                0, entry, new Vec3(1, 0, 0), null, 0, path, 0));
+        animation.add(new com.hwmods.overpressure.tube.CargoAnimation.Sample(
+                2, exit, new Vec3(0, 0, 1), null, 0, path, 1));
+        var middle = animation.at(1);
+        helper.assertTrue(middle.position().distanceToSqr(center) < 1.0E-8,
+                "Interpolated cargo must pass through the tube center at a block turn");
+        helper.assertTrue(middle.position().distanceToSqr(entry.lerp(exit, 0.5)) > 0.1,
+                "Interpolated cargo must not cut across the turn chord");
+        helper.succeed();
+    }
+
+    @GameTest(template = "routing_empty")
     public static void mixedRouteRespectsDividerPriority(GameTestHelper helper) {
         var level = helper.getLevel();
         BlockPos source = helper.absolutePos(new BlockPos(4, 8, 16)), pump = source.east(), divider = pump.east();

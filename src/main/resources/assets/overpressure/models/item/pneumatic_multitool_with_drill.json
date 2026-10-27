@@ -1,0 +1,15 @@
+{
+	"parent": "overpressure:item/pneumatic_multitool_core_base",
+	"loader": "neoforge:composite",
+	"children": {
+		"core": {"parent": "overpressure:item/pneumatic_multitool_core_base"},
+		"attachment": {
+			"parent": "overpressure:item/pneumatic_drill_attachment",
+			"transform": {
+				"rotation": [0, 180, 0],
+				"origin": [0.5, 0.5, 0.9]
+			}
+		}
+	},
+	"item_render_order": ["core", "attachment"]
+}

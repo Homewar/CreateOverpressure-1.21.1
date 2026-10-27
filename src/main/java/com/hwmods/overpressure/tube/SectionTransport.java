@@ -203,7 +203,12 @@ public final class SectionTransport extends SavedData {
             Direction output = incomingAt(level, block.pos(), hop.exit, hop.incoming.getOpposite()).getOpposite();
             junction.markBranchUsed(block.pos().relative(output));
         }
-        cargo.put(entry.id, entry); setDirty(); return true;
+        cargo.put(entry.id, entry);
+        // Seed the client's interpolation buffer before the first server tick moves
+        // the cargo into the route. Otherwise mixed routes first appear partway
+        // through their first block and seem paused for RENDER_DELAY_TICKS.
+        SectionCargoPayload.start(level, entry);
+        setDirty(); return true;
     }
     public void restoreLegacy(ServerLevel level, TubeSection section, MovingTubeItem snapshot, double offset, boolean start) {
         Route route = null;
@@ -246,7 +251,7 @@ public final class SectionTransport extends SavedData {
         }
         return speed;
     }
-    private static double length(Level level, Hop hop) {
+    static double length(Level level, Hop hop) {
         if (hop.location instanceof TransportLocation.Section ref) {
             var section = TubeSections.get(level).get(ref.id());
             return section == null ? 0 : section.geometry().length();

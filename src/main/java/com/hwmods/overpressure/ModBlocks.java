@@ -41,8 +41,6 @@ public class ModBlocks {
     public static final DeferredBlock<CapsulePortBlock> CAPSULE_PORT = BLOCKS.register("capsule_port", () -> new CapsulePortBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.8f).sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<GrindRailBlock> GRIND_RAIL = BLOCKS.register("grind_rail", () -> new GrindRailBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.8f).sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<GrindRailSupportBlock> GRIND_RAIL_SUPPORT = BLOCKS.register("grind_rail_support", () -> new GrindRailSupportBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.8f).sound(SoundType.METAL).noOcclusion()));
-    public static final DeferredItem<PneumaticTubeBlockItem> FLUID_CURVE_ITEM = ITEMS.register("curved_fluid_tube",
-            () -> new PneumaticTubeBlockItem(AllBlocks.FLUID_PIPE.get(), new Item.Properties(), true));
     public static final DeferredItem<Item> PNEUMATIC_TUBE_ITEM = ITEMS.register("pneumatic_tube", () -> new PneumaticTubeBlockItem(PNEUMATIC_TUBE.get(), new Item.Properties()));
     public static final DeferredItem<Item> PNEUMATIC_CONNECTION_ITEM = ITEMS.register("pneumatic_connection", () -> new BlockItem(PNEUMATIC_CONNECTION.get(), new Item.Properties()));
     public static final DeferredItem<Item> ITEM_PUMP_ITEM = ITEMS.register("item_pump", () -> new BlockItem(ITEM_PUMP.get(), new Item.Properties()));
@@ -54,6 +52,10 @@ public class ModBlocks {
     public static final DeferredItem<Item> CAPSULE_PORT_ITEM = ITEMS.register("capsule_port", () -> new BlockItem(CAPSULE_PORT.get(), new Item.Properties()));
     public static final DeferredItem<Item> GRIND_RAIL_ITEM = ITEMS.register("grind_rail", () -> new GrindRailBlockItem(GRIND_RAIL.get(), new Item.Properties()));
     public static final DeferredItem<Item> GRIND_RAIL_SUPPORT_ITEM = ITEMS.register("grind_rail_support", () -> new BlockItem(GRIND_RAIL_SUPPORT.get(), new Item.Properties()));
+    public static final DeferredItem<PneumaticMultitoolItem> PNEUMATIC_MULTITOOL_CORE = ITEMS.register(
+            "pneumatic_multitool_core", () -> new PneumaticMultitoolItem(new Item.Properties()));
+    public static final DeferredItem<Item> PNEUMATIC_DRILL_ATTACHMENT = ITEMS.register("pneumatic_drill_attachment", () -> new Item(new Item.Properties()));
+    public static final DeferredItem<Item> PNEUMATIC_CHAINSAW_ATTACHMENT = ITEMS.register("pneumatic_chainsaw_attachment", () -> new Item(new Item.Properties()));
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> OVERPRESSURE_TAB = CREATIVE_MODE_TABS.register(
             "overpressure",
             () -> CreativeModeTab.builder()
@@ -62,7 +64,6 @@ public class ModBlocks {
                     .withTabsBefore(AllCreativeModeTabs.PALETTES_CREATIVE_TAB.getKey())
                     .displayItems((parameters, output) -> {
                         output.accept(PNEUMATIC_TUBE_ITEM.get());
-                        output.accept(FLUID_CURVE_ITEM.get());
                         output.accept(PNEUMATIC_CONNECTION_ITEM.get());
                         output.accept(ITEM_PUMP_ITEM.get());
                         output.accept(CREATIVE_ITEM_PUMP_ITEM.get());
@@ -73,6 +74,9 @@ public class ModBlocks {
                         output.accept(CAPSULE_PORT_ITEM.get());
                         output.accept(GRIND_RAIL_ITEM.get());
                         output.accept(GRIND_RAIL_SUPPORT_ITEM.get());
+                        output.accept(PNEUMATIC_MULTITOOL_CORE.get());
+                        output.accept(PNEUMATIC_DRILL_ATTACHMENT.get());
+                        output.accept(PNEUMATIC_CHAINSAW_ATTACHMENT.get());
                     })
                     .build()
     );

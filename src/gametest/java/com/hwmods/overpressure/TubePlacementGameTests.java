@@ -340,6 +340,35 @@ public class TubePlacementGameTests {
     }
 
     @GameTest(template = "routing_empty")
+    public static void builtBendsKeepAtLeast45DegreeJointAngle(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(START);
+        var item = (PneumaticTubeBlockItem) ModBlocks.PNEUMATIC_TUBE_ITEM.get();
+        int validCurves = 0;
+        for (int east = 2; east <= 10; east++) {
+            for (int south = 1; south <= 10; south++) {
+                for (Direction face : java.util.List.of(Direction.WEST, Direction.NORTH, Direction.SOUTH)) {
+                    BlockPos target = anchor.offset(east, 0, south);
+                    var plan = item.planClientSection(helper.getLevel(),
+                            new PneumaticTubeBlockItem.CurveStart(anchor, Direction.EAST),
+                            target, face, Vec3.atCenterOf(target));
+                    if (!plan.valid()) continue;
+                    for (var tube : plan.tubes()) {
+                        if (tube.curveP0() == null) continue;
+                        validCurves++;
+                        var curve = new com.hwmods.overpressure.math.CubicBezier(
+                                tube.curveP0(), tube.curveP1(), tube.curveP2(), tube.curveP3());
+                        helper.assertTrue(curve.satisfiesTurnAngleLimit(16, 45.0),
+                                "A valid tube piece must not turn through more than 45 degrees: east="
+                                        + east + ", south=" + south + ", face=" + face);
+                    }
+                }
+            }
+        }
+        helper.assertTrue(validCurves > 0, "The angle regression test must exercise valid curved pieces");
+        helper.succeed();
+    }
+
+    @GameTest(template = "routing_empty")
     public static void longGentleBendCanBeBuilt(GameTestHelper helper) {
         Fixture fixture = selectStart(helper, new Vec3(1, 0, 1).normalize(), 64);
         fixture.item().setPlacementReach(fixture.player(), 28);
