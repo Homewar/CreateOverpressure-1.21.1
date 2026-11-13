@@ -20,7 +20,8 @@
     "ValueSettingsClientMixin",
     "GrindRailPlayerPoseMixin",
     "GrindRailPlayerRendererMixin",
-    "GrindRailHeldItemMixin"
+    "GrindRailHeldItemMixin",
+    "MultitoolPortCaptureMixin"
   ],
   "injectors": {
     "defaultRequire": 1

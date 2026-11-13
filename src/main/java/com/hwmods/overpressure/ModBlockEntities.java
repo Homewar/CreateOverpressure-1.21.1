@@ -36,6 +36,16 @@ public class ModBlockEntities {
                     )
             );
 
+        public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<PneumaticConnectorBlockEntity>> PNEUMATIC_CONNECTOR =
+            BLOCK_ENTITIES.register(
+                    "pneumatic_connector",
+                    () -> new BlockEntityType<>(
+                            PneumaticConnectorBlockEntity::new,
+                            Set.of(ModBlocks.PNEUMATIC_CONNECTOR.get()),
+                            null
+                    )
+            );
+
         public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<CurvaturePneumaticTubeEntity>> CURVATURE_PNEUMATIC_TUBE =
             BLOCK_ENTITIES.register(
                     "curvature_pneumatic_tube",

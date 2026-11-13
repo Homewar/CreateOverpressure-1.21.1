@@ -61,6 +61,7 @@ public class OverpressureClient {
     }
 
     static void registerRenderers(EntityRenderersEvent.RegisterRenderers event) {
+        event.registerEntityRenderer(ModEntities.OXYGEN_PILLAR.get(), OxygenPillarRenderer::new);
         event.registerBlockEntityRenderer(
                 ModBlockEntities.PNEUMATIC_TUBE.get(),
                 PneumaticTubeRenderer::new

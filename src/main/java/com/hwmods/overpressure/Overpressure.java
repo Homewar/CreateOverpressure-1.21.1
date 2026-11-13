@@ -24,6 +24,7 @@ public class Overpressure {
     public Overpressure(IEventBus modBus, ModContainer modContainer) {
         LegacyRegistryAliases.register();
         ModBlocks.register(modBus);
+        ModEntities.ENTITY_TYPES.register(modBus);
         ModBlockEntities.BLOCK_ENTITIES.register(modBus);
         ModSoundEvents.SOUND_EVENTS.register(modBus);
         ModParticleTypes.PARTICLE_TYPES.register(modBus);
@@ -36,7 +37,9 @@ public class Overpressure {
         modBus.addListener(com.hwmods.overpressure.tube.SectionCargoPayload::register);
         modBus.addListener(com.hwmods.overpressure.tube.FluidTubeFlowPayload::register);
         modBus.addListener(MultitoolActionPayload::register);
+        modBus.addListener(MultitoolSpeedPayload::register);
         modBus.addListener(MultitoolOpenPayload::register);
+        modBus.addListener(OxygenPillarPlacePayload::register);
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
     }
 

@@ -5,6 +5,8 @@ import org.lwjgl.glfw.GLFW;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractSliderButton;
+import net.minecraft.client.gui.components.Renderable;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
@@ -27,11 +29,87 @@ public class MultitoolRadialScreen extends Screen {
     }
 
     @Override
+    protected void init() {
+        ItemStack tool = Minecraft.getInstance().player == null
+                ? ItemStack.EMPTY : Minecraft.getInstance().player.getItemInHand(hand);
+        int initialSpeed = PneumaticMultitoolItem.speedSetting(tool);
+        int sliderWidth = 132;
+        int sliderY = Math.min(height / 2 + RADIUS + 8, height - 50);
+        addRenderableWidget(new AbstractSliderButton(
+                width / 2 - sliderWidth / 2,
+                sliderY,
+                sliderWidth,
+                26,
+                Component.translatable("screen.overpressure.multitool.speed", initialSpeed, "%"),
+                (initialSpeed - PneumaticMultitoolItem.MIN_SPEED_SETTING)
+                        / (double) (PneumaticMultitoolItem.MAX_SPEED_SETTING
+                        - PneumaticMultitoolItem.MIN_SPEED_SETTING)) {
+            @Override
+            protected void updateMessage() {
+                setMessage(Component.translatable(
+                        "screen.overpressure.multitool.speed", selectedSpeed(), "%"));
+            }
+
+            @Override
+            protected void applyValue() {
+                int speed = selectedSpeed();
+                if (Minecraft.getInstance().player != null) {
+                    ItemStack held = Minecraft.getInstance().player.getItemInHand(hand);
+                    if (PneumaticMultitoolItem.from(held) != null) {
+                        PneumaticMultitoolItem.setSpeedSetting(held, speed);
+                    }
+                }
+                PacketDistributor.sendToServer(new MultitoolSpeedPayload(hand, speed));
+            }
+
+            @Override
+            public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+                int x = getX();
+                int y = getY();
+                int right = x + width;
+                int bottom = y + height;
+
+                // Create-like brass frame, recessed face and corner rivets.
+                graphics.fill(x + 2, y + 3, right + 2, bottom + 3, 0x90000000);
+                graphics.fill(x, y, right, bottom, 0xFF4B351B);
+                graphics.fill(x + 1, y + 1, right - 1, bottom - 1, 0xFFB88A3B);
+                graphics.fill(x + 2, y + 2, right - 2, bottom - 2, 0xFF302A22);
+                graphics.fill(x + 3, y + 3, right - 3, y + 4, 0xFF5B5142);
+                int rivet = isHovered ? 0xFFFFD477 : 0xFFD6A64D;
+                graphics.fill(x + 4, y + 4, x + 6, y + 6, rivet);
+                graphics.fill(right - 6, y + 4, right - 4, y + 6, rivet);
+
+                graphics.drawCenteredString(Minecraft.getInstance().font, getMessage(),
+                        x + width / 2, y + 4, 0xFFF3E3BC);
+
+                int trackLeft = x + 9;
+                int trackRight = right - 9;
+                int trackY = bottom - 7;
+                int handleCenter = trackLeft + (int) Math.round(value * (trackRight - trackLeft));
+                graphics.fill(trackLeft - 1, trackY - 1, trackRight + 1, trackY + 4, 0xFF17130F);
+                graphics.fill(trackLeft, trackY, trackRight, trackY + 2, 0xFF6A5A43);
+                graphics.fill(trackLeft, trackY, handleCenter, trackY + 2, 0xFFE0AC4C);
+
+                graphics.fill(handleCenter - 4, trackY - 4, handleCenter + 5, trackY + 6, 0xFF3A2814);
+                graphics.fill(handleCenter - 3, trackY - 3, handleCenter + 4, trackY + 5,
+                        isHovered || isFocused() ? 0xFFF2C15C : 0xFFC99138);
+                graphics.fill(handleCenter - 2, trackY - 2, handleCenter + 3, trackY - 1, 0xFFFFDC85);
+            }
+
+            private int selectedSpeed() {
+                int range = PneumaticMultitoolItem.MAX_SPEED_SETTING
+                        - PneumaticMultitoolItem.MIN_SPEED_SETTING;
+                return PneumaticMultitoolItem.MIN_SPEED_SETTING + (int) Math.round(value * range);
+            }
+        });
+    }
+
+    @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        // Apply blur before any menu geometry so only the world is blurred.
+        // Draw the background once. Screen#render would invoke renderBackground again and
+        // place a second blur/menu layer over the radial menu.
         renderBlurredBackground(partialTick);
         graphics.fill(0, 0, width, height, 0x88000000);
-        super.render(graphics, mouseX, mouseY, partialTick);
         int cx = width / 2;
         int cy = height / 2;
         drawDisc(graphics, cx, cy, RADIUS, 0xD01A1C20);
@@ -58,7 +136,10 @@ public class MultitoolRadialScreen extends Screen {
         graphics.drawCenteredString(font, Component.translatable("screen.overpressure.multitool.saw"),
                 sawX + SLOT_SIZE / 2, slotY + SLOT_SIZE + 6, saw ? 0xE9C46A : 0xA0A0A0);
         graphics.drawCenteredString(font, Component.translatable("screen.overpressure.multitool.hint")
-                .withStyle(ChatFormatting.GRAY), cx, cy + RADIUS + 8, 0xA0A0A0);
+                .withStyle(ChatFormatting.GRAY), cx, Math.min(cy + RADIUS + 42, height - 12), 0xA0A0A0);
+        for (Renderable renderable : renderables) {
+            renderable.render(graphics, mouseX, mouseY, partialTick);
+        }
     }
 
     @Override

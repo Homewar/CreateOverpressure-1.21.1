@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " T ",
+    "TBT",
+    " T "
+  ],
+  "key": {
+    "T": {
+      "item": "overpressure:pneumatic_tube"
+    },
+    "B": {
+      "item": "create:brass_casing"
+    }
+  },
+  "result": {
+    "id": "overpressure:pneumatic_connector"
+  }
+}

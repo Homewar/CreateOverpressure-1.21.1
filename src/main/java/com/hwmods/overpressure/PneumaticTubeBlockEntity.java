@@ -1319,7 +1319,8 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         return List.copyOf(speedControllers);
     }
 
-    private int calculateConnectedLineMoveTime() {
+    /** Finds running pumps on the connected route without relying on cargo. */
+    protected int calculateConnectedLineMoveTime() {
         if (level == null) {
             return BASE_MOVE_TIME;
         }
@@ -1349,7 +1350,10 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
                     continue;
                 }
 
-                if (!canMoveBetween(current, next)) {
+                // Pump speed propagates through the physical line in either
+                // direction. Item flow itself remains directional; only this
+                // power/speed discovery may walk against the flow arrow.
+                if (!canMoveBetween(current, next) && !canMoveBetween(next, current)) {
                     continue;
                 }
 
