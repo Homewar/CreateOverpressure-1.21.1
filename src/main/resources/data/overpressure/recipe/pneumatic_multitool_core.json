@@ -1,0 +1,30 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "pattern": [
+    "BLB",
+    "TMB",
+    " A "
+  ],
+  "key": {
+    "B": {
+      "item": "create:brass_sheet"
+    },
+    "L": {
+      "item": "minecraft:redstone_lamp"
+    },
+    "T": {
+      "item": "overpressure:pneumatic_tube"
+    },
+    "M": {
+      "item": "create:precision_mechanism"
+    },
+    "A": {
+      "item": "create:andesite_alloy"
+    }
+  },
+  "result": {
+    "id": "overpressure:pneumatic_multitool_core",
+    "count": 1
+  }
+}

@@ -16,6 +16,7 @@ public final class Config {
     public static final ModConfigSpec.DoubleValue TUBE_SPEED_MULTIPLIER;
     public static final ModConfigSpec.BooleanValue PACKAGERS_ONLY;
     public static final ModConfigSpec.DoubleValue SOUND_VOLUME;
+    public static final ModConfigSpec.DoubleValue MULTITOOL_PUMP_EXTRA_STRESS;
 
     static {
         BUILDER.push("pneumaticTubes");
@@ -31,6 +32,9 @@ public final class Config {
                         "and only sealed packages can enter a tube network."
                 )
                 .define("packagersOnly", false);
+        MULTITOOL_PUMP_EXTRA_STRESS = BUILDER
+                .comment("Extra stress impact (SU per RPM) on a pump supplying one or more held pneumatic multitools.")
+                .defineInRange("multitoolPumpExtraStress", 7.0, 0.0, 1024.0);
         BUILDER.pop();
 
         SOUND_VOLUME = BUILDER

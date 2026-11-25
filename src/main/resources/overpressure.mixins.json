@@ -13,7 +13,9 @@
     "CurveInteractionMixin",
     "CurveItemUseMixin",
     "CurveBlockPlacementMixin",
-    "SectionPlacementCollisionMixin"
+    "SectionPlacementCollisionMixin",
+    "MultitoolDestroyProgressMixin",
+    "MultitoolServerMiningMixin"
   ],
   "client": [
     "SectionPickItemMixin",
@@ -21,7 +23,9 @@
     "GrindRailPlayerPoseMixin",
     "GrindRailPlayerRendererMixin",
     "GrindRailHeldItemMixin",
-    "MultitoolPortCaptureMixin"
+    "MultitoolPortCaptureMixin",
+    "BacktankPortCaptureMixin",
+    "MultitoolClientMiningMixin"
   ],
   "injectors": {
     "defaultRequire": 1

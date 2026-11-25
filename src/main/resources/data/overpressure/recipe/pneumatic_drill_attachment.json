@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "pattern": [
+    " N ",
+    "IDI",
+    " H "
+  ],
+  "key": {
+    "N": {
+      "item": "minecraft:netherite_ingot"
+    },
+    "I": {
+      "item": "create:iron_sheet"
+    },
+    "D": {
+      "item": "create:mechanical_drill"
+    },
+    "H": {
+      "item": "create:shaft"
+    }
+  },
+  "result": {
+    "id": "overpressure:pneumatic_drill_attachment",
+    "count": 1
+  }
+}

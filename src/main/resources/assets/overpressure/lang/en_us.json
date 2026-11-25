@@ -1,6 +1,7 @@
 {
   "block.overpressure.oxygen_pillar": "Oxygen Pillar",
   "item.overpressure.oxygen_pillar": "Oxygen Pillar",
+  "item.overpressure.glowing_oxygen_pillar": "Glowing Oxygen Pillar",
   "key.overpressure.place_oxygen_pillar": "Place Oxygen Pillar",
   "screen.overpressure.multitool.speed": "Speed: %s%s",
   "tooltip.overpressure.multitool.speed_setting": "Speed setting: %s%%",
@@ -39,6 +40,7 @@
   "message.overpressure.multitool.selected.drill": "Drill attachment",
   "message.overpressure.multitool.selected.saw": "Saw attachment",
   "message.overpressure.multitool.missing_attachment": "Required attachment is not in your inventory",
+  "message.overpressure.multitool.low_pressure": "Low pressure · the pump needs at least 128 RPM",
   "subtitles.overpressure.grind_collide": "Clank",
   "subtitles.overpressure.grind_slow_loop": "Sliding",
   "subtitles.overpressure.grind_fast_loop": "Grinding",

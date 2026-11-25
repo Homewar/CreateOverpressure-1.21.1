@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    " K ",
+    "CIC",
+    " K "
+  ],
+  "key": {
+    "K": {
+      "item": "minecraft:kelp"
+    },
+    "C": {
+      "item": "create:copper_sheet"
+    },
+    "I": {
+      "item": "minecraft:iron_nugget"
+    }
+  },
+  "result": {
+    "id": "overpressure:oxygen_pillar",
+    "count": 2
+  }
+}

@@ -43,12 +43,12 @@ public class PneumaticMultitoolItem extends Item {
     private static final float NETHERITE_HASTE_TWO_SPEED = 9.0F * 1.4F;
     private static final float REFERENCE_TUBE_SPEED = 20.0F / PneumaticTubeBlockEntity.BASE_MOVE_TIME;
     private static final float MAX_DESTROY_SPEED = 64.0F;
+    private static final float MAX_BREAK_PROGRESS_PER_TICK = 0.32F;
     /** Autonomous compressed-air sources run the tool at 20 blocks per second. */
     private static final float AUTONOMOUS_AIR_SPEED = 20.0F;
     private static final float TUBE_SPEED_AT_128_RPM = 5.0F;
     private static final float BACKTANK_REFERENCE_DESTROY_SPEED = NETHERITE_HASTE_TWO_SPEED
             * TUBE_SPEED_AT_128_RPM / REFERENCE_TUBE_SPEED;
-    private static final int CONNECTOR_RADIUS = 8;
     public static final int MAX_RESERVE_BLOCKS = 16;
     public static final int MIN_SPEED_SETTING = 10;
     public static final int MAX_SPEED_SETTING = 100;
@@ -190,8 +190,25 @@ public class PneumaticMultitoolItem extends Item {
             return net.minecraft.world.InteractionResult.PASS;
         }
         if (!context.getLevel().isClientSide && context.getPlayer() instanceof ServerPlayer player) {
-            // Reuse the authoritative placement and inventory handling used by T.
-            OxygenPillarPlacePayload.place(player, context.getHand());
+            var pos = context.getClickedPos().relative(context.getClickedFace());
+            var inventory = player.getInventory();
+            ItemStack stack = player.getOffhandItem();
+            if (!(stack.getItem() instanceof OxygenPillarItem)) {
+                for (ItemStack candidate : inventory.items) {
+                    if (!candidate.isEmpty() && candidate.getItem() instanceof OxygenPillarItem) {
+                        stack = candidate;
+                        break;
+                    }
+                }
+            }
+            if (!(stack.getItem() instanceof OxygenPillarItem pillar)) {
+                return net.minecraft.world.InteractionResult.PASS;
+            }
+            if (!OxygenPillarEntity.place(player.level(), pos, context.getClickedFace(), pillar.isGlowingVariant())) {
+                return net.minecraft.world.InteractionResult.FAIL;
+            }
+            if (!player.getAbilities().instabuild) stack.shrink(1);
+            return net.minecraft.world.InteractionResult.CONSUME;
         }
         return net.minecraft.world.InteractionResult.sidedSuccess(context.getLevel().isClientSide);
     }
@@ -199,7 +216,7 @@ public class PneumaticMultitoolItem extends Item {
     @Override
     public boolean canAttackBlock(BlockState state, Level level, BlockPos pos, Player player) {
         ItemStack stack = player.getMainHandItem();
-        return selected(stack) != Attachment.NONE && hasMiningPower(stack, level, player);
+        return selected(stack) != Attachment.NONE && hasMiningPower(stack, player);
     }
 
     @Override
@@ -211,6 +228,24 @@ public class PneumaticMultitoolItem extends Item {
         return !data(stack).getBoolean(POWERED) ? 1.0F : configuredDestroySpeed(stack);
     }
 
+    public static float limitDestroyProgress(ItemStack stack, BlockState state, float progress) {
+        CompoundTag power = data(stack);
+        Attachment attachment = selected(stack);
+        if (attachment == Attachment.NONE || !power.getBoolean(POWERED)) {
+            return 0.0F;
+        }
+        float limit = MAX_BREAK_PROGRESS_PER_TICK;
+        if (supports(attachment, state)) {
+            if (progress > 0.0F && power.getBoolean(IN_CONNECTOR_RANGE)
+                    && power.getFloat(CONNECTOR_SPEED) >= PneumaticConnectorBlockEntity.MAX_FLOW_SPEED
+                    && speedSetting(stack) == MAX_SPEED_SETTING) {
+                return 1.0F;
+            }
+            limit *= configuredDestroySpeed(stack) / MAX_DESTROY_SPEED;
+        }
+        return Math.min(progress, limit);
+    }
+
     @Override
     public boolean isCorrectToolForDrops(ItemStack stack, BlockState state) {
         return supports(selected(stack), state) && !state.is(BlockTags.INCORRECT_FOR_NETHERITE_TOOL);
@@ -219,7 +254,7 @@ public class PneumaticMultitoolItem extends Item {
     @Override
     public boolean mineBlock(ItemStack stack, Level level, BlockState state, BlockPos pos, LivingEntity miner) {
         if (!level.isClientSide && miner instanceof Player player && supports(selected(stack), state)) {
-            consumeMiningPower(stack, level, player);
+            consumeMiningPower(stack, player);
         }
         return selected(stack) != Attachment.NONE;
     }
@@ -240,28 +275,37 @@ public class PneumaticMultitoolItem extends Item {
         }
 
         if (isSelected && entity instanceof Player player) {
-            float detectedSpeed = connectorSpeed(level, player.blockPosition());
-            boolean inRange = detectedSpeed > 0.0F;
-            boolean reservePower = reserveBlocks(stack) > 0;
-            boolean backtankPower = hasEnoughBacktankAir(stack, player);
-            boolean powered = inRange || reservePower || backtankPower;
-            float activeSpeed = inRange ? detectedSpeed
-                    : (reservePower || backtankPower ? AUTONOMOUS_AIR_SPEED : REFERENCE_TUBE_SPEED);
-            CompoundTag current = data(stack);
-            boolean changed = current.getBoolean(IN_CONNECTOR_RANGE) != inRange
-                    || current.getBoolean(POWERED) != powered
-                    || Math.abs(current.getFloat(CONNECTOR_SPEED) - activeSpeed) > 1.0E-4F
-                    || inRange && current.getInt(RESERVE_BLOCKS) != MAX_RESERVE_BLOCKS;
-            if (changed) {
-                updateData(stack, tag -> {
-                    tag.putBoolean(IN_CONNECTOR_RANGE, inRange);
-                    tag.putBoolean(POWERED, powered);
-                    tag.putFloat(CONNECTOR_SPEED, activeSpeed);
-                    if (inRange) {
-                        tag.putInt(RESERVE_BLOCKS, MAX_RESERVE_BLOCKS);
-                    }
-                });
-            }
+            updateHeldPower(stack, player);
+        }
+    }
+
+    public static void updateHeldPower(ItemStack stack, Player player) {
+        Level level = player.level();
+        PneumaticConnectorBlockEntity connector = PneumaticAirNetwork.findConnector(level, player.position());
+        if (!level.isClientSide && connector != null && selected(stack) != Attachment.NONE) {
+            connector.requestToolLoad();
+        }
+        float detectedSpeed = connector == null ? 0.0F : connector.getItemSpeed();
+        boolean inRange = detectedSpeed > 0.0F;
+        boolean reservePower = reserveBlocks(stack) > 0;
+        boolean backtankPower = hasEnoughBacktankAir(stack, player);
+        boolean powered = inRange || reservePower || backtankPower;
+        float activeSpeed = inRange ? detectedSpeed
+                : (reservePower || backtankPower ? AUTONOMOUS_AIR_SPEED : 0.0F);
+        CompoundTag current = data(stack);
+        boolean changed = current.getBoolean(IN_CONNECTOR_RANGE) != inRange
+                || current.getBoolean(POWERED) != powered
+                || Math.abs(current.getFloat(CONNECTOR_SPEED) - activeSpeed) > 1.0E-4F
+                || inRange && current.getInt(RESERVE_BLOCKS) != MAX_RESERVE_BLOCKS;
+        if (changed) {
+            updateData(stack, tag -> {
+                tag.putBoolean(IN_CONNECTOR_RANGE, inRange);
+                tag.putBoolean(POWERED, powered);
+                tag.putFloat(CONNECTOR_SPEED, activeSpeed);
+                if (inRange) {
+                    tag.putInt(RESERVE_BLOCKS, MAX_RESERVE_BLOCKS);
+                }
+            });
         }
     }
 
@@ -294,44 +338,9 @@ public class PneumaticMultitoolItem extends Item {
         };
     }
 
-    private static float connectorSpeed(Level level, BlockPos origin) {
-        java.util.ArrayDeque<BlockPos> queue = new java.util.ArrayDeque<>();
-        java.util.HashSet<BlockPos> visited = new java.util.HashSet<>();
-        // Start at either a connector or a relay next to the player. From
-        // there the search follows only links no longer than the hose range.
-        for (OxygenPillarEntity relay : level.getEntitiesOfClass(OxygenPillarEntity.class,
-                new net.minecraft.world.phys.AABB(origin).inflate(CONNECTOR_RADIUS))) {
-            queue.add(relay.blockPosition());
-        }
-        for (BlockPos p : BlockPos.betweenClosed(origin.offset(-CONNECTOR_RADIUS, -CONNECTOR_RADIUS, -CONNECTOR_RADIUS),
-                origin.offset(CONNECTOR_RADIUS, CONNECTOR_RADIUS, CONNECTOR_RADIUS))) {
-            if (level.getBlockState(p).is(ModBlocks.PNEUMATIC_CONNECTOR.get())
-                    && origin.distSqr(p) <= CONNECTOR_RADIUS * CONNECTOR_RADIUS) queue.add(p.immutable());
-        }
-        float speed = 0.0F;
-        while (!queue.isEmpty()) {
-            BlockPos node = queue.remove();
-            if (!visited.add(node)) continue;
-            if (level.getBlockState(node).is(ModBlocks.PNEUMATIC_CONNECTOR.get())) {
-                speed = Math.max(speed, level.getBlockEntity(node) instanceof PneumaticConnectorBlockEntity c
-                        ? Math.max(PneumaticConnectorBlockEntity.DEFAULT_ITEM_SPEED, c.getItemSpeed())
-                        : PneumaticConnectorBlockEntity.DEFAULT_ITEM_SPEED);
-            }
-            // New relays are entities. They relay power but never invent a
-            // speed: the value always comes from a reachable connector.
-            for (OxygenPillarEntity relay : level.getEntitiesOfClass(OxygenPillarEntity.class,
-                    new net.minecraft.world.phys.AABB(node).inflate(CONNECTOR_RADIUS))) {
-                if (node.distSqr(relay.blockPosition()) <= CONNECTOR_RADIUS * CONNECTOR_RADIUS) {
-                    queue.add(relay.blockPosition());
-                }
-            }
-            for (BlockPos p : BlockPos.betweenClosed(node.offset(-CONNECTOR_RADIUS, -CONNECTOR_RADIUS, -CONNECTOR_RADIUS),
-                    node.offset(CONNECTOR_RADIUS, CONNECTOR_RADIUS, CONNECTOR_RADIUS))) {
-                if (node.distSqr(p) <= CONNECTOR_RADIUS * CONNECTOR_RADIUS
-                        && (level.getBlockState(p).is(ModBlocks.OXYGEN_PILLAR.get()) || level.getBlockState(p).is(ModBlocks.PNEUMATIC_CONNECTOR.get()))) queue.add(p.immutable());
-            }
-        }
-        return speed;
+    private static float connectorSpeed(Player player) {
+        PneumaticConnectorBlockEntity connector = PneumaticAirNetwork.findConnector(player.level(), player.position());
+        return connector == null ? 0.0F : connector.getItemSpeed();
     }
 
     private static float cachedConnectorSpeed(ItemStack stack) {
@@ -340,11 +349,10 @@ public class PneumaticMultitoolItem extends Item {
     }
 
 
-    private static boolean hasMiningPower(ItemStack stack, Level level, Player player) {
-        return player.getAbilities().instabuild
-                || connectorSpeed(level, player.blockPosition()) > 0.0F
-                || reserveBlocks(stack) > 0
-                || hasEnoughBacktankAir(stack, player);
+    private static boolean hasMiningPower(ItemStack stack, Player player) {
+        return reserveBlocks(stack) > 0
+                || hasEnoughBacktankAir(stack, player)
+                || connectorSpeed(player) > 0.0F;
     }
 
     private static boolean hasEnoughBacktankAir(ItemStack stack, LivingEntity miner) {
@@ -368,24 +376,27 @@ public class PneumaticMultitoolItem extends Item {
 
     private static float fullDestroySpeed(ItemStack stack) {
         float tubeSpeed = cachedConnectorSpeed(stack);
-        return tubeSpeed <= 0.0F ? 1.0F : Math.min(MAX_DESTROY_SPEED,
-                NETHERITE_HASTE_TWO_SPEED * tubeSpeed / REFERENCE_TUBE_SPEED);
+        float minFlow = PneumaticConnectorBlockEntity.MIN_FLOW_SPEED;
+        float maxFlow = PneumaticConnectorBlockEntity.MAX_FLOW_SPEED;
+        float fraction = Math.clamp((tubeSpeed - minFlow) / (maxFlow - minFlow), 0.0F, 1.0F);
+        return NETHERITE_HASTE_TWO_SPEED + fraction * (MAX_DESTROY_SPEED - NETHERITE_HASTE_TWO_SPEED);
     }
 
     private static int airCostPerBlockMilli(ItemStack stack) {
         float maxBacktankCost = BacktankUtil.maxAirWithoutEnchants()
                 * 1_000.0F / BACKTANK_BLOCKS_AT_MAX_SPEED;
-        float tubeSpeedFactor = Math.min(1.0F, fullDestroySpeed(stack) / BACKTANK_REFERENCE_DESTROY_SPEED);
+        float tubeSpeedFactor = Math.clamp(cachedConnectorSpeed(stack) / TUBE_SPEED_AT_128_RPM,
+                1.0F / BACKTANK_REFERENCE_DESTROY_SPEED, 1.0F);
         float selectedSpeedFactor = speedSetting(stack) / 100.0F;
         return Math.max(1, Math.round(maxBacktankCost * tubeSpeedFactor * selectedSpeedFactor));
     }
 
-    private static void consumeMiningPower(ItemStack stack, Level level, Player player) {
+    private static void consumeMiningPower(ItemStack stack, Player player) {
         if (player.getAbilities().instabuild) {
             return;
         }
 
-        float detectedSpeed = connectorSpeed(level, player.blockPosition());
+        float detectedSpeed = connectorSpeed(player);
         if (detectedSpeed > 0.0F) {
             updateData(stack, tag -> {
                 tag.putBoolean(IN_CONNECTOR_RANGE, true);

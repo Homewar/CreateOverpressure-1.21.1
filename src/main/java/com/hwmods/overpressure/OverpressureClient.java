@@ -16,6 +16,8 @@ import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 // This class will not load on dedicated servers. Accessing client side code from here is safe.
 @Mod(value = Overpressure.MODID, dist = Dist.CLIENT)
 public class OverpressureClient {
+    public static final ModelResourceLocation GLOWING_PILLAR_MODEL = ModelResourceLocation.standalone(
+            ResourceLocation.fromNamespaceAndPath(Overpressure.MODID, "block/glowing_oxygen_pillar"));
     public static final ModelResourceLocation PNEUMATIC_CAPSULE_MODEL = ModelResourceLocation.standalone(
             ResourceLocation.fromNamespaceAndPath(Overpressure.MODID, "entity/capsule/pneumo_capsule")
     );
@@ -105,6 +107,7 @@ public class OverpressureClient {
     }
 
     static void registerAdditionalModels(ModelEvent.RegisterAdditional event) {
+        event.register(GLOWING_PILLAR_MODEL);
         event.register(PNEUMATIC_CAPSULE_MODEL);
         event.register(DEVIDER_BLOCK_MODEL);
         event.register(DEVIDER_MERGE_BLOCK_MODEL);

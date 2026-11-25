@@ -1,6 +1,7 @@
 {
   "block.overpressure.oxygen_pillar": "Кислородный столбик",
   "item.overpressure.oxygen_pillar": "Кислородный столбик",
+  "item.overpressure.glowing_oxygen_pillar": "Светящийся кислородный столбик",
   "key.overpressure.place_oxygen_pillar": "Поставить кислородный столбик",
   "screen.overpressure.multitool.speed": "Скорость: %s%s",
   "tooltip.overpressure.multitool.speed_setting": "Настройка скорости: %s%%",
@@ -39,6 +40,7 @@
   "message.overpressure.multitool.selected.drill": "Буровая насадка",
   "message.overpressure.multitool.selected.saw": "Пильная насадка",
   "message.overpressure.multitool.missing_attachment": "Нужной насадки нет в инвентаре",
+  "message.overpressure.multitool.low_pressure": "Низкое давление · насосу нужно не менее 128 об/мин",
   "subtitles.overpressure.grind_collide": "Лязг",
   "subtitles.overpressure.grind_slow_loop": "Качение",
   "subtitles.overpressure.grind_fast_loop": "Скольжение",

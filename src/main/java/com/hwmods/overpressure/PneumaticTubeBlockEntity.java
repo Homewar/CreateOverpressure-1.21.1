@@ -171,15 +171,17 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
     }
 
     public static void addTransportSpeedTooltip(List<Component> tooltip, int moveTime) {
-        int clampedMoveTime = Math.max(0, moveTime);
-        double blocksPerSecond = clampedMoveTime == 0 ? 0.0 : 20.0 / clampedMoveTime;
+        double blocksPerSecond = moveTime <= 0 ? 0.0 : 20.0 / moveTime;
+        addTransportSpeedTooltip(tooltip, blocksPerSecond, 20.0 / Config.applyTubeSpeed(MIN_PUMPED_MOVE_TIME));
+    }
 
+    protected static void addTransportSpeedTooltip(List<Component> tooltip, double blocksPerSecond, double maxSpeed) {
         CreateLang.builder()
                 .add(Component.translatable("overpressure.goggles.transport_speed")
                         .withStyle(ChatFormatting.GRAY))
                 .forGoggles(tooltip);
         CreateLang.builder()
-                .add(speedBar(clampedMoveTime))
+                .add(speedBar(blocksPerSecond, maxSpeed))
                 .space()
                 .add(CreateLang.number(blocksPerSecond)
                         .style(ChatFormatting.AQUA))
@@ -188,13 +190,11 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
                 .forGoggles(tooltip, 1);
     }
 
-    private static MutableComponent speedBar(int moveTime) {
-        if (moveTime <= 0) {
+    private static MutableComponent speedBar(double speed, double maxSpeed) {
+        if (speed <= 0) {
             return Component.literal("|".repeat(SPEED_BAR_SEGMENTS)).withStyle(ChatFormatting.DARK_GRAY);
         }
 
-        double speed = 20.0 / moveTime;
-        double maxSpeed = 20.0 / Config.applyTubeSpeed(MIN_PUMPED_MOVE_TIME);
         int filled = Math.max(1, Math.min(SPEED_BAR_SEGMENTS, (int) Math.round(speed / maxSpeed * SPEED_BAR_SEGMENTS)));
         return Component.empty()
                 .append(Component.literal("|".repeat(filled)).withStyle(ChatFormatting.DARK_GREEN))
@@ -1319,13 +1319,24 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
         return List.copyOf(speedControllers);
     }
 
-    /** Finds running pumps on the connected route without relying on cargo. */
-    protected int calculateConnectedLineMoveTime() {
+    private int calculateConnectedLineMoveTime() {
         if (level == null) {
             return BASE_MOVE_TIME;
         }
+        ItemPumpBlockEntity pump = findConnectedPump(candidate -> {
+            int ticks = candidate.getMoveTime();
+            return ticks > 0 ? 20.0 / ticks : 0.0;
+        });
+        return pump == null ? 0 : pump.getMoveTime();
+    }
 
-        int moveTime = 0;
+    /** Finds the highest-scoring pump on the connected route without relying on cargo. */
+    protected ItemPumpBlockEntity findConnectedPump(java.util.function.ToDoubleFunction<ItemPumpBlockEntity> scoreOf) {
+        if (level == null) {
+            return null;
+        }
+        double bestScore = 0.0;
+        ItemPumpBlockEntity bestPump = null;
         Set<BlockPos> visited = new HashSet<>();
         Queue<BlockPos> queue = new ArrayDeque<>();
 
@@ -1336,8 +1347,12 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
             BlockPos current = queue.remove();
             BlockEntity currentBlockEntity = level.getBlockEntity(current);
 
-            if (currentBlockEntity instanceof ItemPumpBlockEntity pump && pump.isRunning()) {
-                moveTime = moveTime == 0 ? pump.getMoveTime() : Math.min(moveTime, pump.getMoveTime());
+            if (currentBlockEntity instanceof ItemPumpBlockEntity pump) {
+                double score = scoreOf.applyAsDouble(pump);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestPump = pump;
+                }
             }
 
             if (currentBlockEntity instanceof DeviderBlockEntity && !current.equals(worldPosition)) {
@@ -1362,7 +1377,7 @@ public class PneumaticTubeBlockEntity extends SmartBlockEntity implements IHaveG
             }
         }
 
-        return moveTime;
+        return bestPump;
     }
 
     private boolean canMoveBetween(BlockPos from, BlockPos to, Direction direction) {

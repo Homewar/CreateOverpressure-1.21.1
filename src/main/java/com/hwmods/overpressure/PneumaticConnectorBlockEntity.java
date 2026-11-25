@@ -1,19 +1,26 @@
 package com.hwmods.overpressure;
 
+import java.util.List;
+
 import javax.annotation.Nullable;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 
 public class PneumaticConnectorBlockEntity extends PneumaticTubeBlockEntity {
-    public static final float DEFAULT_ITEM_SPEED = 20.0f / BASE_MOVE_TIME;
+    public static final float MIN_FLOW_SPEED = 10.0F;
+    public static final float MAX_FLOW_SPEED = 20.0F;
     private static final String ITEM_SPEED_TAG = "ItemSpeed";
 
-    private float itemSpeed = DEFAULT_ITEM_SPEED;
+    private float itemSpeed;
+    private float potentialItemSpeed;
+    private ItemPumpBlockEntity supplyingPump;
 
     public PneumaticConnectorBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlockEntities.PNEUMATIC_CONNECTOR.get(), pos, state);
@@ -52,26 +59,39 @@ public class PneumaticConnectorBlockEntity extends PneumaticTubeBlockEntity {
     }
 
     public float getItemSpeed() {
-        return itemSpeed;
+        if (level == null || level.isClientSide) {
+            return itemSpeed;
+        }
+        return supplyingPump == null || supplyingPump.isRemoved() ? 0.0F : supplyingPump.getMultitoolFlowSpeed();
     }
 
-    public void setItemSpeed(float itemSpeed) {
-        float sanitizedSpeed = Float.isFinite(itemSpeed) ? Math.max(0.0f, itemSpeed) : DEFAULT_ITEM_SPEED;
-        if (Float.compare(this.itemSpeed, sanitizedSpeed) == 0) {
-            return;
+    float getPotentialItemSpeed() {
+        if (level == null || level.isClientSide) {
+            return potentialItemSpeed;
         }
-        this.itemSpeed = sanitizedSpeed;
-        setChanged();
-        notifyUpdate();
+        return supplyingPump == null || supplyingPump.isRemoved() ? 0.0F : supplyingPump.getPotentialMultitoolFlowSpeed();
+    }
+
+    void requestToolLoad() {
+        if (supplyingPump != null && !supplyingPump.isRemoved()) {
+            supplyingPump.requestToolLoad();
+        }
     }
 
     private void refreshStoredItemSpeed() {
-        // Do not call getDisplayedMoveTime(): that method intentionally uses
-        // the currently rendered cargo first, which made tool power flicker.
-        // This walks the route to pumps even when the line is empty.
-        int moveTime = calculateConnectedLineMoveTime();
-        int effectiveMoveTime = moveTime <= 0 ? BASE_MOVE_TIME : moveTime;
-        setItemSpeed(20.0f / effectiveMoveTime);
+        supplyingPump = findConnectedPump(ItemPumpBlockEntity::getPotentialMultitoolFlowSpeed);
+        float speed = getItemSpeed();
+        float potentialSpeed = getPotentialItemSpeed();
+        if (this.itemSpeed != speed || this.potentialItemSpeed != potentialSpeed) {
+            this.itemSpeed = speed;
+            this.potentialItemSpeed = potentialSpeed;
+            setChanged();
+            notifyUpdate();
+        }
+    }
+
+    private static float sanitizeSpeed(float speed) {
+        return Float.isFinite(speed) && speed >= MIN_FLOW_SPEED ? Math.min(MAX_FLOW_SPEED, speed) : 0.0F;
     }
 
     @Override
@@ -80,21 +100,27 @@ public class PneumaticConnectorBlockEntity extends PneumaticTubeBlockEntity {
     }
 
     @Override
-    public int getDisplayedMoveTime() {
-        return itemSpeed <= 0.0f ? 0 : Math.max(1, Math.round(20.0f / itemSpeed));
+    public boolean addToGoggleTooltip(List<Component> tooltip, boolean isPlayerSneaking) {
+        addTransportSpeedTooltip(tooltip, itemSpeed, MAX_FLOW_SPEED);
+        if (itemSpeed <= 0.0F) {
+            tooltip.add(Component.translatable("message.overpressure.multitool.low_pressure").withStyle(ChatFormatting.RED));
+        }
+        return true;
     }
 
     @Override
     protected void write(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
         super.write(tag, registries, clientPacket);
         tag.putFloat(ITEM_SPEED_TAG, itemSpeed);
+        if (clientPacket) {
+            tag.putFloat("PotentialItemSpeed", potentialItemSpeed);
+        }
     }
 
     @Override
     protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
         super.read(tag, registries, clientPacket);
-        itemSpeed = tag.contains(ITEM_SPEED_TAG) && Float.isFinite(tag.getFloat(ITEM_SPEED_TAG))
-                ? Math.max(0.0f, tag.getFloat(ITEM_SPEED_TAG))
-                : DEFAULT_ITEM_SPEED;
+        itemSpeed = sanitizeSpeed(tag.getFloat(ITEM_SPEED_TAG));
+        potentialItemSpeed = sanitizeSpeed(tag.getFloat("PotentialItemSpeed"));
     }
 }

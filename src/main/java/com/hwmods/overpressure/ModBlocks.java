@@ -10,6 +10,7 @@ import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.LightBlock;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.MapColor;
@@ -33,6 +34,9 @@ public class ModBlocks {
     public static final DeferredBlock<CurvaturePneumaticTubeBlock> CURVATURE_PNEUMATIC_TUBE = BLOCKS.register("curvature_pneumatic_tube", () -> new CurvaturePneumaticTubeBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.3f).sound(SoundType.AMETHYST).noOcclusion()));
     public static final DeferredBlock<PneumaticConnectorBlock> PNEUMATIC_CONNECTOR = BLOCKS.register("pneumatic_connector", () -> new PneumaticConnectorBlock(BlockBehaviour.Properties.of().mapColor(MapColor.GOLD).strength(0.8f).sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<OxygenPillarBlock> OXYGEN_PILLAR = BLOCKS.register("oxygen_pillar", () -> new OxygenPillarBlock(BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_LIGHT_BLUE).strength(0.5f).sound(SoundType.METAL).noOcclusion()));
+    public static final DeferredBlock<LightBlock> OXYGEN_PILLAR_LIGHT = BLOCKS.register("oxygen_pillar_light",
+            () -> new LightBlock(BlockBehaviour.Properties.of().noCollission().noLootTable()
+                    .replaceable().lightLevel(LightBlock.LIGHT_EMISSION)));
     public static final DeferredBlock<PneumaticConnectionBlock> PNEUMATIC_CONNECTION = BLOCKS.register("pneumatic_connection", () -> new PneumaticConnectionBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.3f).sound(SoundType.AMETHYST).noOcclusion()));
     public static final DeferredBlock<ItemPumpBlock> ITEM_PUMP = BLOCKS.register("item_pump", () -> new ItemPumpBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.6f).sound(SoundType.METAL).noOcclusion()));
     public static final DeferredBlock<ItemPumpBlock> CREATIVE_ITEM_PUMP = BLOCKS.register("creative_item_pump", () -> new ItemPumpBlock(BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_LIGHT_BLUE).strength(0.6f).sound(SoundType.METAL).noOcclusion()));
@@ -45,7 +49,9 @@ public class ModBlocks {
     public static final DeferredBlock<GrindRailSupportBlock> GRIND_RAIL_SUPPORT = BLOCKS.register("grind_rail_support", () -> new GrindRailSupportBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(0.8f).sound(SoundType.METAL).noOcclusion()));
     public static final DeferredItem<Item> PNEUMATIC_TUBE_ITEM = ITEMS.register("pneumatic_tube", () -> new PneumaticTubeBlockItem(PNEUMATIC_TUBE.get(), new Item.Properties()));
     public static final DeferredItem<Item> PNEUMATIC_CONNECTOR_ITEM = ITEMS.register("pneumatic_connector", () -> new BlockItem(PNEUMATIC_CONNECTOR.get(), new Item.Properties()));
-    public static final DeferredItem<Item> OXYGEN_PILLAR_ITEM = ITEMS.register("oxygen_pillar", () -> new OxygenPillarItem(new Item.Properties().stacksTo(16)));
+    public static final DeferredItem<Item> OXYGEN_PILLAR_ITEM = ITEMS.register("oxygen_pillar", () -> new OxygenPillarItem(new Item.Properties().stacksTo(16), false));
+    public static final DeferredItem<Item> GLOWING_OXYGEN_PILLAR_ITEM = ITEMS.register("glowing_oxygen_pillar",
+            () -> new OxygenPillarItem(new Item.Properties().stacksTo(16), true));
     public static final DeferredItem<Item> PNEUMATIC_CONNECTION_ITEM = ITEMS.register("pneumatic_connection", () -> new BlockItem(PNEUMATIC_CONNECTION.get(), new Item.Properties()));
     public static final DeferredItem<Item> ITEM_PUMP_ITEM = ITEMS.register("item_pump", () -> new BlockItem(ITEM_PUMP.get(), new Item.Properties()));
     public static final DeferredItem<Item> CREATIVE_ITEM_PUMP_ITEM = ITEMS.register("creative_item_pump", () -> new BlockItem(CREATIVE_ITEM_PUMP.get(), new Item.Properties()));
@@ -70,6 +76,7 @@ public class ModBlocks {
                         output.accept(PNEUMATIC_TUBE_ITEM.get());
                         output.accept(PNEUMATIC_CONNECTOR_ITEM.get());
                         output.accept(OXYGEN_PILLAR_ITEM.get());
+                        output.accept(GLOWING_OXYGEN_PILLAR_ITEM.get());
                         output.accept(PNEUMATIC_CONNECTION_ITEM.get());
                         output.accept(ITEM_PUMP_ITEM.get());
                         output.accept(CREATIVE_ITEM_PUMP_ITEM.get());

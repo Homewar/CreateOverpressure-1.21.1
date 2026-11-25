@@ -39,7 +39,6 @@ public class Overpressure {
         modBus.addListener(MultitoolActionPayload::register);
         modBus.addListener(MultitoolSpeedPayload::register);
         modBus.addListener(MultitoolOpenPayload::register);
-        modBus.addListener(OxygenPillarPlacePayload::register);
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
     }
 

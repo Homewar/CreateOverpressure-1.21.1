@@ -35,6 +35,7 @@
   "message.overpressure.multitool.selected.drill": "Accesorio de taladro",
   "message.overpressure.multitool.selected.saw": "Accesorio de sierra",
   "message.overpressure.multitool.missing_attachment": "El accesorio necesario no está en el inventario",
+  "message.overpressure.multitool.low_pressure": "Presión baja · la bomba necesita al menos 128 RPM",
   "subtitles.overpressure.grind_collide": "Clank",
   "subtitles.overpressure.grind_slow_loop": "Deslizamiento",
   "subtitles.overpressure.grind_fast_loop": "Deslizamiento rápido",
